@@ -1,0 +1,3 @@
+[submodule "Src/Async.Collections"]
+	path = Src/Async.Collections
+	url = https://github.com/ulfbou/Async.Collections.git
