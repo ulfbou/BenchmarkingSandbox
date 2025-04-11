@@ -1,0 +1,49 @@
+# Automatically generated files
+/bin
+/obj
+/out
+/packages
+
+# User-specific files
+*.userprefs
+*.suo
+*.sln.docstates
+
+# Build results
+*.dll
+*.exe
+*.pdb
+*.metagen
+*.il
+*.cache
+_ReSharper.*
+JetBrains.Profiler.*
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.datacollection
+
+# NuGet related files
+nuget.config
+packages/
+
+# Tooling
+.vs/
+
+# Docker
+/docker/
+
+# Kubernetes
+/helm/
+
+# GitHub Actions
+/.github/_temp
+
+# Documentation
+/docs/_build
+
+# OS-specific files
+.DS_Store
+Thumbs.db
