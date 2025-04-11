@@ -36,6 +36,17 @@ jobs:
       run: dotnet restore BenchmarkingSandbox.sln
       working-directory: .
 
+    # --- Add these debug logging steps ---
+    - name: Print contents of Src/Async.Collections/Src
+      run: ls -R Src/Async.Collections/Src
+
+    - name: Print contents of Src/Async.Collections/Src/Async.Collections.csproj
+      run: cat Src/Async.Collections/Src/Async.Collections.csproj
+
+    - name: Print contents of Src/Async.Locks/Src/Async.Locks.csproj
+      run: cat Src/Async.Locks/Src/Async.Locks.csproj
+    # --- End of debug logging ---
+
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
 
