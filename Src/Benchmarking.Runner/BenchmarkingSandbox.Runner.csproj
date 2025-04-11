@@ -12,4 +12,10 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Async.Collections">
+			<HintPath>..\..\..\..\Async\Collections\Src\bin\Debug\net9.0\Async.Collections.dll</HintPath>
+		</Reference>
+	</ItemGroup>
 </Project>
