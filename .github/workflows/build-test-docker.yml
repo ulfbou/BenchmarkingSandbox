@@ -26,8 +26,11 @@ jobs:
       run: ls -R
     - name: Print current working directory
       run: pwd
+    - name: List Async.Collections project directory
+      run: ls -R Src/Async.Collections/Src
     - name: Restore dependencies
       run: dotnet restore BenchmarkingSandbox.sln
+      working-directory: .
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
     - name: Run unit tests
