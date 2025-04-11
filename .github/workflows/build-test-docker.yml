@@ -12,8 +12,7 @@ jobs:
     permissions:
       packages: write
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
       with:
         repository: ${{ github.repository }}
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -23,13 +22,20 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0.x'
+    - name: List repository contents
+      run: ls -R
+    - name: Print current working directory
+      run: pwd
     - name: Restore dependencies
       run: dotnet restore BenchmarkingSandbox.sln
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
     - name: Run unit tests
-      working-directory: Tests/Benchmarking.Tests
-      run: dotnet test --configuration Release Benchmarking.Tests.csproj
+      run: dotnet test --configuration Release Tests/Benchmarking.Tests/Benchmarking.Tests.csproj -v detailed
+    - name: Print contents of Tests directory
+      run: ls -R Tests
+    - name: Print contents of Tests/Benchmarking.Tests directory
+      run: ls -R Tests/Benchmarking.Tests
     - name: Build and push Docker image
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
