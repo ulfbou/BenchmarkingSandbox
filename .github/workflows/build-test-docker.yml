@@ -1,0 +1,38 @@
+name: Build, Test, and Dockerize
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+    - name: Restore dependencies
+      run: dotnet restore BenchmarkingSandbox.sln
+    - name: Build
+      run: dotnet build --configuration Release BenchmarkingSandbox.sln
+    - name: Run unit tests
+      run: dotnet test --configuration Release Tests/Benchmarking.Tests/Benchmarking.Tests.csproj
+    - name: Build and push Docker image
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        DOCKER_REGISTRY: ghcr.io
+        DOCKER_USERNAME: ${{ github.actor }}
+        DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        IMAGE_NAME: benchmarking-sandbox
+      run: |
+        docker login $DOCKER_REGISTRY -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }} -f docker/Dockerfile .
+        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }}
+        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
+        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
