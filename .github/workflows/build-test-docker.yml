@@ -23,12 +23,8 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0.x'
-    - name: List repository contents
-      run: ls -R
-    - name: Print current working directory
-      run: pwd
-    - name: List Async.Collections project directory
-      run: ls -R Src/Async.Collections/Src
+    - name: List projects in solution
+      run: dotnet sln BenchmarkingSandbox.sln list
     - name: Restore dependencies
       run: dotnet restore BenchmarkingSandbox.sln
       working-directory: .
