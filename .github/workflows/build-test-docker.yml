@@ -17,27 +17,39 @@ jobs:
         repository: ${{ github.repository }}
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
+
+    - name: Checkout submodules
+      run: git submodule update --init --recursive
+
     - name: Set Git protocol to HTTPS
       run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
     - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0.x'
+
     - name: List projects in solution
       run: dotnet sln BenchmarkingSandbox.sln list
+
     - name: Restore dependencies
       run: dotnet restore BenchmarkingSandbox.sln
       working-directory: .
+
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
+
     - name: Run unit tests
       run: |
         cd Tests/Benchmarking.Tests
         dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj -v detailed
+
     - name: Print contents of Tests directory
       run: ls -R Tests
+
     - name: Print contents of Tests/Benchmarking.Tests directory
       run: ls -R Tests/Benchmarking.Tests
+
     - name: Build and push Docker image
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
