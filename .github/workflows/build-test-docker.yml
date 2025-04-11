@@ -17,6 +17,8 @@ jobs:
       with:
         repository: ${{ github.repository }}
         token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set Git protocol to HTTPS
+      run: git config --global url."https://github.com/"
     - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
       with:
