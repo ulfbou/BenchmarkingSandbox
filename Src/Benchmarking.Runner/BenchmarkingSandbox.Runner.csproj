@@ -7,12 +7,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Async.Collections\Src\Async.Collections.csproj" />
 		<ProjectReference Include="..\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
-		<ProjectReference Include="../../../../../Async/Collections/Src/Async.Collections.csproj" />
 	</ItemGroup>
 </Project>
