@@ -31,7 +31,9 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
     - name: Run unit tests
-      run: dotnet test --configuration Release Tests/Benchmarking.Tests/Benchmarking.Tests.csproj -v detailed
+      run: |
+        cd Tests/Benchmarking.Tests
+        dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj -v detailed
     - name: Print contents of Tests directory
       run: ls -R Tests
     - name: Print contents of Tests/Benchmarking.Tests directory
