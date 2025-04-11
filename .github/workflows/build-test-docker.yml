@@ -28,7 +28,8 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
     - name: Run unit tests
-      run: dotnet test --configuration Release Tests/Benchmarking.Tests/Benchmarking.Tests.csproj
+      working-directory: Tests/Benchmarking.Tests
+      run: dotnet test --configuration Release Benchmarking.Tests.csproj
     - name: Build and push Docker image
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
