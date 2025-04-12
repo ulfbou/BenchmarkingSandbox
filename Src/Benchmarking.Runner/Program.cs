@@ -4,6 +4,8 @@ using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Running;
 
+using Benchmarking.Runners;
+
 using BenchmarkingSandbox.Runner;
 
 public class Program
@@ -13,6 +15,6 @@ public class Program
         var config = ManualConfig.Create(DefaultConfig.Instance)
             .AddExporter(JsonExporter.Full)
             .AddExporter(CsvExporter.Default);
-        var summary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmark>(config);
+        var summary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>();
     }
 }
