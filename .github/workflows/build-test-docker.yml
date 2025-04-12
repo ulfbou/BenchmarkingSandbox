@@ -1,4 +1,4 @@
-name: Build, Test, and Dockerize
+name: Build, Test, and Benchmark, and Dockerize
 
 on:
   push:
@@ -7,10 +7,10 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
+    outputs:
+      sha: ${{ steps.get_sha.outputs.short_sha }}
     steps:
     - uses: actions/checkout@v3
       with:
@@ -21,11 +21,9 @@ jobs:
     - name: Checkout submodules
       run: git submodule update --init --recursive --depth=0
 
-    - name: Print Git log for Async.Collections submodule
-      run: cd Src/Async.Collections && git log --oneline -n 5
-
-    - name: Print Git log for Async.Locks submodule
-      run: cd Src/Async.Locks && git log --oneline -n 5
+    - name: Get short SHA
+      id: get_sha
+      run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
     - name: Set Git protocol to HTTPS
       run: git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -35,40 +33,80 @@ jobs:
       with:
         dotnet-version: '9.0.x'
 
-    - name: List projects in solution
-      run: dotnet sln BenchmarkingSandbox.sln list
-
     - name: Restore dependencies
       run: dotnet restore BenchmarkingSandbox.sln
       working-directory: .
 
-    # --- Add these debug logging steps ---
-    - name: Print contents of Src/Async.Collections/Src
-      run: ls -R Src/Async.Collections/Src
-
-    - name: Print contents of Src/Async.Collections/Src/Async.Collections.csproj
-      run: cat Src/Async.Collections/Src/Async.Collections.csproj
-
-    - name: Print contents of Src/Async.Locks/Src/Async.Locks.csproj
-      run: cat Src/Async.Locks/Src/Async.Locks.csproj
-    # --- End of debug logging ---
-
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ github.repository }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+
+    - name: Checkout submodules
+      run: git submodule update --init --recursive --depth=0
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
 
     - name: Run unit tests
       run: |
         cd Tests/Benchmarking.Tests
         dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj -v detailed
 
-    - name: Print contents of Tests directory
-      run: ls -R Tests
+  benchmark:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ github.repository }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
 
-    - name: Print contents of Tests/Benchmarking.Tests directory
-      run: ls -R Tests/Benchmarking.Tests
+    - name: Checkout submodules
+      run: git submodule update --init --recursive --depth=0
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Run benchmarks
+      run: dotnet run --project src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj --configuration Release
+
+  dockerize:
+    needs: [build, test, benchmark]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ github.repository }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+
+    - name: Checkout submodules
+      run: git submodule update --init --recursive --depth=0
+
+    - name: Set Git protocol to HTTPS
+      run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
 
     - name: Build and push Docker image
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
         DOCKER_REGISTRY: ghcr.io
         DOCKER_USERNAME: ${{ github.actor }}
@@ -76,7 +114,7 @@ jobs:
         IMAGE_NAME: benchmarking-sandbox
       run: |
         docker login $DOCKER_REGISTRY -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }} -f docker/Dockerfile .
-        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }}
-        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
+        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} -f docker/Dockerfile .
+        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }}
+        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
         docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
