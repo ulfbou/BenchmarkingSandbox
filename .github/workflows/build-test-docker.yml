@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    name: Build the BenchmarkingSandbox projects and create Docker image
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.get_sha.outputs.short_sha }}
@@ -40,6 +41,12 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release BenchmarkingSandbox.sln
 
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-output
+        path: ${{ github.workspace }}/Src/*/bin/Release/net9.0/
+
   test:
     needs: build
     runs-on: ubuntu-latest
@@ -63,6 +70,13 @@ jobs:
         cd Tests/Benchmarking.Tests
         dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj -v detailed
 
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: ${{ github.workspace }}/Tests/*/TestResults/*.trx
+      if: always()
+
   benchmark:
     needs: build
     runs-on: ubuntu-latest
@@ -81,9 +95,17 @@ jobs:
       with:
         dotnet-version: '9.0.x'
 
+    - name: Change working directory
+      run: cd ${{ github.workspace }}/Src/Benchmarking/Runner
+
     - name: Run benchmarks
-      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
+
+    - name: Upload Benchmark Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: ${{ github.workspace }}/Src/Benchmarking/Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
 
   dockerize:
     needs: [build, test, benchmark]
