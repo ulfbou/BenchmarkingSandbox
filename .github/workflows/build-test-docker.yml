@@ -81,23 +81,8 @@ jobs:
       with:
         dotnet-version: '9.0.x'
 
-    - name: Debug - Print Working Directory
-      run: pwd
-
-    - name: Debug - List Contents of Root
-      run: ls -l
-
-    - name: Debug - List Contents of src
-      run: ls -l src
-
-    - name: Debug - List Contents of src/Benchmarking
-      run: ls -l src/Benchmarking
-
-    - name: Debug - List Contents of src/Benchmarking/Runner
-      run: ls -l src/Benchmarking/Runner
-
     - name: Run benchmarks
-      working-directory: ${{ github.workspace }}/src/Benchmarking.Runner
+      working-directory: ${{ github.workspace }}/Src/Benchmarking/Runner
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
 
   dockerize:
