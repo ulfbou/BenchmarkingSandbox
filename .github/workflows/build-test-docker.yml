@@ -82,8 +82,8 @@ jobs:
         dotnet-version: '9.0.x'
 
     - name: Run benchmarks
+      working-directory: ${{ github.workspace }}/src/Benchmarking.Runner
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
-      working-directory: src/Benchmarking.Runner
 
   dockerize:
     needs: [build, test, benchmark]
