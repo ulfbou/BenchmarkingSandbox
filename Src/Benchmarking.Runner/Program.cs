@@ -1,15 +1,18 @@
-﻿// BenchmarkingSandbox/src/Benchmarking.Runner/Program.cs
-
+﻿
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters.Csv;
+using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Running;
 
-namespace BenchmarkingSandbox.Runner
+using BenchmarkingSandbox.Runner;
+
+public class Program
 {
-    public class Program
+    public static void Main(string[] args)
     {
-        public static void Main(string[] args)
-        {
-            var summary = BenchmarkRunner.Run<SimpleBenchmark>();
-            var asyncQueueSummary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmark>();
-        }
+        var config = ManualConfig.Create(DefaultConfig.Instance)
+            .AddExporter(JsonExporter.Full)
+            .AddExporter(CsvExporter.Default);
+        var summary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmark>(config);
     }
 }
