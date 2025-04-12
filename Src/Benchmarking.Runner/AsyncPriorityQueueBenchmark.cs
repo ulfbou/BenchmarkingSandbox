@@ -1,82 +1,69 @@
 using Async.Collections;
 
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
 
-namespace BenchmarkingSandbox.Runner
+namespace Benchmarking.Runners
 {
     [MemoryDiagnoser]
-    [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.Declared)]
-    [RankColumn]
-    public class AsyncPriorityQueueBenchmark
+    public class AsyncPriorityQueueBenchmarks
     {
-        private AsyncPriorityQueue<int, int> _queue = default!;
-        private int[] _dataToAdd = default!;
+        private AsyncPriorityQueue<int, int> _priorityQueue = null!;
+        private List<int> _itemsToAdd = null!;
+        private List<int> _itemsToContain = null!;
+        private List<int> _itemsToRemove = null!;
 
         [Params(100, 1000, 10000)]
         public int N { get; set; }
 
         [GlobalSetup]
-        public void Setup()
+        public void GlobalSetup()
         {
-            _queue = new AsyncPriorityQueue<int, int>(i => i);
-            _dataToAdd = Enumerable.Range(0, N).ToArray();
+            _priorityQueue = new AsyncPriorityQueue<int, int>(i => i);
+            _itemsToAdd = Enumerable.Range(0, N).ToList();
+            _itemsToContain = Enumerable.Range(N / 4, N / 2).ToList();
+            _itemsToRemove = Enumerable.Range(0, N / 3).ToList();
+
+            foreach (var item in _itemsToAdd)
+            {
+                _priorityQueue.AddAsync(item).AsTask().Wait();
+            }
+        }
+
+        [IterationCleanup]
+        public async Task IterationCleanup()
+        {
+            await _priorityQueue.ClearAsync();
+
+            foreach (var item in _itemsToAdd)
+            {
+                await _priorityQueue.AddAsync(item);
+            }
         }
 
         [Benchmark]
         public async Task AddMultipleAsync()
         {
-            foreach (var item in _dataToAdd)
-            {
-                await _queue.AddAsync(item);
-            }
+            var itemsToAdd = Enumerable.Range(N, N).ToList();
+            await _priorityQueue.AddMultipleAsync(itemsToAdd);
         }
 
         [Benchmark]
         public async Task ContainsMultipleAsync()
         {
-            foreach (var item in _dataToAdd)
-            {
-                await _queue.ContainsAsync(item);
-            }
+            await _priorityQueue.ContainsMultipleAsync(_itemsToContain);
         }
 
         [Benchmark]
         public async Task CountMultipleAsync()
         {
-            for (int i = 0; i < N; i++)
-            {
-                await _queue.CountAsync();
-            }
+            await _priorityQueue.CountMultipleAsync(_itemsToContain);
         }
 
         [Benchmark]
         public async Task RemoveMultipleAsync()
         {
-            foreach (var item in _dataToAdd)
-            {
-                await _queue.RemoveAsync(item);
-            }
-        }
-
-        [Benchmark]
-        public async Task ToArrayAsync()
-        {
-            await _queue.ToArrayAsync();
-        }
-
-        [Benchmark]
-        public async Task GetAsyncEnumeratorMultiple()
-        {
-            await foreach (var _ in _queue)
-            {
-                // Consume the items
-            }
-        }
-
-        [GlobalCleanup]
-        public async Task Cleanup()
-        {
-            await _queue.DisposeAsync();
+            await _priorityQueue.RemoveMultipleAsync(_itemsToRemove);
         }
     }
 }
