@@ -18,16 +18,14 @@ jobs:
         repository: ${{ github.repository }}
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
-
-    - name: Checkout submodules
-      run: git submodule update --init --recursive --depth=0
+        fetch-depth: 0 # Ensure a full clone
 
     - name: Get short SHA
       id: get_sha
       run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
     - name: Set Git protocol to HTTPS
-      run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      run: git config --global url."https://github.com//".insteadOf "git@github.com:"
 
     - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
