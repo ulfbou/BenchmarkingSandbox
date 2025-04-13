@@ -37,7 +37,8 @@ namespace BenchmarkingSandbox.Runner
         [GlobalSetup]
         public void Setup()
         {
-            _asyncLock = new AsyncLock();
+            // Ask AsyncLock to monitor by setting shouldMonitor to true
+            _asyncLock = new AsyncLock(shouldMonitor: true);
             _monitor = new AsyncLockMonitor();
             _monitor.Enable();
         }
