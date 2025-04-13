@@ -95,23 +95,25 @@ jobs:
       with:
         dotnet-version: '9.0.x'
 
-    - name: Change working directory
-      run: cd ${{ github.workspace }}/Src/Benchmarking.Runner
-
     - name: (Debug) Print current working directory
       run: pwd
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: (Debug) List files in the (supposed) working directory - More detail
       run: ls -la
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: (Debug) Check if the project file exists directly
       run: test -f BenchmarkingSandbox.Runner.csproj && echo "Project file EXISTS" || echo "Project file DOES NOT EXIST"
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: Build Benchmark Project
       run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: Run benchmarks
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: Upload Benchmark Results
       uses: actions/upload-artifact@v4
