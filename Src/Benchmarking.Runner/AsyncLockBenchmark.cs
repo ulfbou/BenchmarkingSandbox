@@ -23,6 +23,9 @@ namespace BenchmarkingSandbox.Runner
         [Params(0, 1, 10, 100)]
         public int InitialDelayMilliseconds { get; set; }
 
+        [Params(1, 10)]
+        public int TimeoutMs { get; set; }
+
         [GlobalSetup]
         public void Setup()
         {
@@ -90,10 +93,10 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [BenchmarkCategory("TryAcquireTimeout")]
-        [Params(TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(10))]
         [Benchmark]
-        public async Task TryAcquire_Timeout(TimeSpan timeout)
+        public async Task TryAcquire_Timeout()
         {
+            var timeout = TimeSpan.FromMilliseconds(TimeoutMs);
             await using (await _asyncLock.AcquireAsync(timeout))
             {
                 await Task.Delay(1);
@@ -101,10 +104,10 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [BenchmarkCategory("TryAcquireTimeout_Contention")]
-        [Params(TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(10))]
         [Benchmark]
-        public async Task TryAcquire_Timeout_Contention(TimeSpan timeout)
+        public async Task TryAcquire_Timeout_Contention()
         {
+            var timeout = TimeSpan.FromMilliseconds(TimeoutMs);
             var tasks = Enumerable.Range(0, ConcurrentTasks)
                 .Select(async _ =>
                 {
