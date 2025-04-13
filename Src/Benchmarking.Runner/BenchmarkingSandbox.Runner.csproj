@@ -14,6 +14,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Async.Collections\Src\Async.Collections.csproj" />
+		<ProjectReference Include="..\Async.Locks\Src\Async.Locks.csproj" />
 		<ProjectReference Include="..\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
 	</ItemGroup>
 
