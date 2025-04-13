@@ -2,9 +2,12 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Async.Locks;
+using Async.Locks.Events;
+using Async.Locks.Monitoring;
 
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
+using BenchmarkDotNet.Diagnosers;
 
 namespace BenchmarkingSandbox.Runner
 {
@@ -12,109 +15,121 @@ namespace BenchmarkingSandbox.Runner
     [ThreadingDiagnoser]
     [RankColumn]
     [Orderer(SummaryOrderPolicy.FastestToSlowest)]
+    [WarmupCount(10)]
+    [IterationCount(20)]
+    [InvocationCount(8)]
     public class AsyncLockBenchmark
     {
         private AsyncLock _asyncLock = null!;
-        private AsyncLock _fifoLock = null!;
-        private AsyncLock _lifoLock = null!;
-        private AsyncLock _priorityLockConstant = null!;
-        private AsyncLock _priorityLockCounterFifo = null!;
-        private AsyncLock _priorityLockRandom = null!;
-        private AsyncLock _priorityLockHighLow = null!;
-
-        private long _fifoCounter;
+        private AsyncLockMonitor _monitor = null!;
         private int _resource = 0;
-        private const int DefaultTaskCount = 100;
+        private const int MaxTaskCount = 100; // Limit concurrent tasks
 
-        [Params(1, 5, 10, 50, 100)]
+        [Params(1, 5, 10, 50, MaxTaskCount)]
         public int ConcurrentTasks { get; set; }
 
-        [Params(0, 1, 10, 100)]
-        public int InitialDelayMilliseconds { get; set; }
-
-        [Params(1, 10)]
+        [Params(0, 1, 10, 50)]
         public int TimeoutMs { get; set; }
 
-        [Params(0, 1, 5)]
-        public int LockHoldTimeMs { get; set; } // Varying delay for contention benchmarks
+        [Params(0, 1, 10, 50)]
+        public int CancellationDelay { get; set; }
 
         [GlobalSetup]
         public void Setup()
         {
             _asyncLock = new AsyncLock();
-            _fifoLock = new AsyncLock(new FifoLockQueueStrategy());
-            _lifoLock = new AsyncLock(new LifoLockQueueStrategy());
-            _priorityLockConstant = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => 0));
-            _priorityLockCounterFifo = new AsyncLock(new AsyncPriorityQueueStrategy<long>(tcs => Interlocked.Increment(ref _fifoCounter)));
-            _priorityLockRandom = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => Random.Shared.Next()));
-            var toggle = false;
-            _priorityLockHighLow = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => toggle ? 1 : 0));
+            _monitor = new AsyncLockMonitor();
+            _monitor.Enable();
+        }
+
+        [GlobalCleanup]
+        public void Cleanup()
+        {
+            _monitor?.Dispose();
         }
 
         [BenchmarkCategory("AcquireRelease")]
         [Benchmark(Baseline = true)]
-        public async Task AcquireRelease_Single()
+        public async Task AcquireRelease_Uncontended()
         {
             await using (await _asyncLock.AcquireAsync())
             {
-                await Task.Delay(1); // Simulate a very short protected operation
+                await Task.Delay(1);
             }
         }
 
         [BenchmarkCategory("AcquireRelease")]
         [Benchmark]
-        public async Task AcquireRelease_Concurrent()
+        public async Task AcquireRelease_Contended()
         {
-            var tasks = Enumerable.Range(0, ConcurrentTasks)
-                .Select(async _ =>
+            var tasks = new Task[ConcurrentTasks];
+            for (int i = 0; i < ConcurrentTasks; i++)
+            {
+                tasks[i] = Task.Run(async () =>
                 {
-                    await Task.Delay(InitialDelayMilliseconds);
+                    var taskId = Task.CurrentId ?? 0;
+
+                    AsyncLockEvents.Log.TaskStarted(taskId);
                     await using (await _asyncLock.AcquireAsync())
                     {
+                        AsyncLockEvents.Log.LockAcquired(taskId);
                         await Task.Delay(1);
+                        AsyncLockEvents.Log.LockReleased(taskId);
                     }
-                }).ToArray();
+                    AsyncLockEvents.Log.TaskCompleted(taskId);
+                });
+            }
+            await Task.WhenAll(tasks);
+
+            // Analyze _monitor.GetEvents() here for queuing details
+            var events = _monitor.GetEvents();
+
+            foreach (var e in events)
+            {
+                Console.WriteLine($"Event: {e.EventName}, TaskId: {e.TaskId}, Timestamp: {e.Timestamp}");
+            }
+
+            _monitor.Reset();
+        }
+
+        [BenchmarkCategory("Contention")]
+        [Benchmark]
+        public async Task ContendedIncrementDecrement()
+        {
+            var tasks = new Task[ConcurrentTasks];
+            for (int i = 0; i < ConcurrentTasks; i++)
+            {
+                tasks[i] = Task.Run(async () =>
+                {
+                    await using (await _asyncLock.AcquireAsync())
+                    {
+                        Interlocked.Increment(ref _resource);
+                        await Task.Delay(1);
+                        Interlocked.Decrement(ref _resource);
+                    }
+                });
+            }
             await Task.WhenAll(tasks);
         }
 
-        [BenchmarkCategory("AcquireRelease_Fifo")]
+        [BenchmarkCategory("Uncontended")]
         [Benchmark]
-        public async Task AcquireRelease_Concurrent_Fifo()
+        public async Task UncontendedAcquireRelease()
         {
-            var tasks = Enumerable.Range(0, ConcurrentTasks)
-                .Select(async _ =>
+            await using (await _asyncLock.AcquireAsync())
+            {
+                await using (await _asyncLock.AcquireAsync())
                 {
-                    await Task.Delay(InitialDelayMilliseconds);
-                    await using (await _fifoLock.AcquireAsync())
-                    {
-                        await Task.Delay(1);
-                    }
-                }).ToArray();
-            await Task.WhenAll(tasks);
-        }
-
-        [BenchmarkCategory("AcquireRelease_Lifo")]
-        [Benchmark]
-        public async Task AcquireRelease_Concurrent_Lifo()
-        {
-            var tasks = Enumerable.Range(0, ConcurrentTasks)
-                .Select(async _ =>
-                {
-                    await Task.Delay(InitialDelayMilliseconds);
-                    await using (await _lifoLock.AcquireAsync())
-                    {
-                        await Task.Delay(1);
-                    }
-                }).ToArray();
-            await Task.WhenAll(tasks);
+                    await Task.Delay(1);
+                }
+            }
         }
 
         [BenchmarkCategory("TryAcquireTimeout")]
         [Benchmark]
-        public async Task TryAcquire_Timeout()
+        public async Task TryAcquire_Timeout_Successful()
         {
-            var timeout = TimeSpan.FromMilliseconds(TimeoutMs);
-            await using (await _asyncLock.AcquireAsync(timeout))
+            await using (await _asyncLock.AcquireAsync(TimeSpan.FromMilliseconds(TimeoutMs > 0 ? TimeoutMs : Timeout.Infinite)))
             {
                 await Task.Delay(1);
             }
@@ -122,13 +137,12 @@ namespace BenchmarkingSandbox.Runner
 
         [BenchmarkCategory("TryAcquireTimeout_Contention")]
         [Benchmark]
-        public async Task TryAcquire_Timeout_Contention()
+        public async Task TryAcquire_Timeout_Failure_Contended()
         {
             var timeout = TimeSpan.FromMilliseconds(TimeoutMs);
             var tasks = Enumerable.Range(0, ConcurrentTasks)
                 .Select(async _ =>
                 {
-                    await Task.Delay(InitialDelayMilliseconds);
                     try
                     {
                         await using (await _asyncLock.AcquireAsync(timeout))
@@ -148,7 +162,7 @@ namespace BenchmarkingSandbox.Runner
         [Benchmark]
         public async Task Acquire_Cancellation_NoContention()
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+            using var cts = new CancellationTokenSource(CancellationDelay);
             try
             {
                 await using (await _asyncLock.AcquireAsync(cancellationToken: cts.Token))
@@ -166,11 +180,14 @@ namespace BenchmarkingSandbox.Runner
         [Benchmark]
         public async Task Acquire_Cancellation_Contention()
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
-            var tasks = Enumerable.Range(0, ConcurrentTasks)
-                .Select(async _ =>
+            using var cts = new CancellationTokenSource(CancellationDelay);
+            var tasks = new Task[ConcurrentTasks];
+            var cancelledCount = 0;
+
+            for (int i = 0; i < ConcurrentTasks; i++)
+            {
+                tasks[i] = Task.Run(async () =>
                 {
-                    await Task.Delay(InitialDelayMilliseconds);
                     try
                     {
                         await using (await _asyncLock.AcquireAsync(cancellationToken: cts.Token))
@@ -180,94 +197,29 @@ namespace BenchmarkingSandbox.Runner
                     }
                     catch (TaskCanceledException)
                     {
-                        // Expected
+                        Interlocked.Increment(ref cancelledCount);
                     }
-                }).ToArray();
-            await Task.WhenAll(tasks);
-        }
-
-        [BenchmarkCategory("Contention")]
-        [Benchmark]
-        public async Task ContendedAcquireRelease()
-        {
-            var tasks = new Task[ConcurrentTasks]; // Use the parameterized TaskCount
-            for (int i = 0; i < ConcurrentTasks; i++)
-            {
-                tasks[i] = Task.Run(async () =>
-                {
-                    await using (await _asyncLock.AcquireAsync())
+                    catch (TimeoutException)
                     {
-                        Interlocked.Increment(ref _resource);
-                        await Task.Delay(LockHoldTimeMs); // Simulate some work using the parameterized delay
-                        Interlocked.Decrement(ref _resource);
+                        // Handle if your AcquireAsync throws TimeoutException on cancellation
+                        // This is not expected in this scenario, but you can log or handle it if needed
+
+                        Console.WriteLine($"Task {Task.CurrentId} timed out.");
+                        Interlocked.Increment(ref cancelledCount);
                     }
                 });
             }
             await Task.WhenAll(tasks);
-        }
 
-        [BenchmarkCategory("Uncontended")]
-        [Benchmark]
-        public async Task UncontendedAcquireRelease()
-        {
-            await using (await _asyncLock.AcquireAsync())
+            // Assert on cancelledCount for validation
+            if (cancelledCount > 0)
             {
-                await using (await _asyncLock.AcquireAsync())
-                {
-                    Interlocked.Increment(ref _resource);
-                    await Task.Delay(1);
-                    Interlocked.Decrement(ref _resource);
-                }
+                Console.WriteLine($"Cancelled tasks: {cancelledCount}");
             }
-        }
-
-        [BenchmarkCategory("Contention_Strategies")]
-        [Benchmark(Baseline = true)]
-        public async Task FifoContention() => await RunContentionBenchmark(_fifoLock);
-
-        [BenchmarkCategory("Contention_Strategies")]
-        [Benchmark]
-        public async Task PriorityContentionConstant() => await RunContentionBenchmark(_priorityLockConstant);
-
-        [BenchmarkCategory("Contention_Strategies")]
-        [Benchmark]
-        public async Task PriorityContentionCounterFifo() => await RunContentionBenchmark(_priorityLockCounterFifo);
-
-        [BenchmarkCategory("Contention_Strategies")]
-        [Benchmark]
-        public async Task PriorityContentionRandom() => await RunContentionBenchmark(_priorityLockRandom);
-
-        [BenchmarkCategory("Contention_Strategies")]
-        [Benchmark]
-        public async Task PriorityContentionHighLow() => await RunContentionBenchmark(_priorityLockHighLow);
-
-        private async Task RunContentionBenchmark(AsyncLock asyncLock)
-        {
-            var tasks = new Task[ConcurrentTasks]; // Use the parameterized TaskCount
-            for (int i = 0; i < ConcurrentTasks; i++)
+            else
             {
-                tasks[i] = Task.Run(async () =>
-                {
-                    await using (await asyncLock.AcquireAsync())
-                    {
-                        await Task.Delay(LockHoldTimeMs); // Use the parameterized LockHoldTimeMs
-                    }
-                });
+                Console.WriteLine("No tasks were cancelled.");
             }
-            await Task.WhenAll(tasks);
-        }
-
-        [GlobalCleanup]
-        public Task Cleanup()
-        {
-            _asyncLock?.DisposeAsync();
-            _fifoLock?.DisposeAsync();
-            _lifoLock?.DisposeAsync();
-            _priorityLockConstant?.DisposeAsync();
-            _priorityLockCounterFifo?.DisposeAsync();
-            _priorityLockRandom?.DisposeAsync();
-            _priorityLockHighLow?.DisposeAsync();
-            return Task.CompletedTask;
         }
     }
 }
