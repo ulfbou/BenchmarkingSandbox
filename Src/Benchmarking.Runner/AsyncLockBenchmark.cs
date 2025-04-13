@@ -1,4 +1,4 @@
-// Copyright (c) FluentInjections Project. All rights reserved.
+// Copyright (c) Ulf Bourelius. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Async.Locks;
@@ -9,13 +9,22 @@ using BenchmarkDotNet.Order;
 namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
-    [Orderer(SummaryOrderPolicy.Declared)]
+    [ThreadingDiagnoser]
     [RankColumn]
+    [Orderer(SummaryOrderPolicy.FastestToSlowest)]
     public class AsyncLockBenchmark
     {
         private AsyncLock _asyncLock = null!;
         private AsyncLock _fifoLock = null!;
         private AsyncLock _lifoLock = null!;
+        private AsyncLock _priorityLockConstant = null!;
+        private AsyncLock _priorityLockCounterFifo = null!;
+        private AsyncLock _priorityLockRandom = null!;
+        private AsyncLock _priorityLockHighLow = null!;
+
+        private long _fifoCounter;
+        private int _resource = 0;
+        private const int DefaultTaskCount = 100;
 
         [Params(1, 5, 10, 50, 100)]
         public int ConcurrentTasks { get; set; }
@@ -26,12 +35,20 @@ namespace BenchmarkingSandbox.Runner
         [Params(1, 10)]
         public int TimeoutMs { get; set; }
 
+        [Params(0, 1, 5)]
+        public int LockHoldTimeMs { get; set; } // Varying delay for contention benchmarks
+
         [GlobalSetup]
         public void Setup()
         {
             _asyncLock = new AsyncLock();
             _fifoLock = new AsyncLock(new FifoLockQueueStrategy());
             _lifoLock = new AsyncLock(new LifoLockQueueStrategy());
+            _priorityLockConstant = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => 0));
+            _priorityLockCounterFifo = new AsyncLock(new AsyncPriorityQueueStrategy<long>(tcs => Interlocked.Increment(ref _fifoCounter)));
+            _priorityLockRandom = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => Random.Shared.Next()));
+            var toggle = false;
+            _priorityLockHighLow = new AsyncLock(new AsyncPriorityQueueStrategy<int>(tcs => toggle ? 1 : 0));
         }
 
         [BenchmarkCategory("AcquireRelease")]
@@ -167,6 +184,90 @@ namespace BenchmarkingSandbox.Runner
                     }
                 }).ToArray();
             await Task.WhenAll(tasks);
+        }
+
+        [BenchmarkCategory("Contention")]
+        [Benchmark]
+        public async Task ContendedAcquireRelease()
+        {
+            var tasks = new Task[ConcurrentTasks]; // Use the parameterized TaskCount
+            for (int i = 0; i < ConcurrentTasks; i++)
+            {
+                tasks[i] = Task.Run(async () =>
+                {
+                    await using (await _asyncLock.AcquireAsync())
+                    {
+                        Interlocked.Increment(ref _resource);
+                        await Task.Delay(LockHoldTimeMs); // Simulate some work using the parameterized delay
+                        Interlocked.Decrement(ref _resource);
+                    }
+                });
+            }
+            await Task.WhenAll(tasks);
+        }
+
+        [BenchmarkCategory("Uncontended")]
+        [Benchmark]
+        public async Task UncontendedAcquireRelease()
+        {
+            await using (await _asyncLock.AcquireAsync())
+            {
+                await using (await _asyncLock.AcquireAsync())
+                {
+                    Interlocked.Increment(ref _resource);
+                    await Task.Delay(1);
+                    Interlocked.Decrement(ref _resource);
+                }
+            }
+        }
+
+        [BenchmarkCategory("Contention_Strategies")]
+        [Benchmark(Baseline = true)]
+        public async Task FifoContention() => await RunContentionBenchmark(_fifoLock);
+
+        [BenchmarkCategory("Contention_Strategies")]
+        [Benchmark]
+        public async Task PriorityContentionConstant() => await RunContentionBenchmark(_priorityLockConstant);
+
+        [BenchmarkCategory("Contention_Strategies")]
+        [Benchmark]
+        public async Task PriorityContentionCounterFifo() => await RunContentionBenchmark(_priorityLockCounterFifo);
+
+        [BenchmarkCategory("Contention_Strategies")]
+        [Benchmark]
+        public async Task PriorityContentionRandom() => await RunContentionBenchmark(_priorityLockRandom);
+
+        [BenchmarkCategory("Contention_Strategies")]
+        [Benchmark]
+        public async Task PriorityContentionHighLow() => await RunContentionBenchmark(_priorityLockHighLow);
+
+        private async Task RunContentionBenchmark(AsyncLock asyncLock)
+        {
+            var tasks = new Task[ConcurrentTasks]; // Use the parameterized TaskCount
+            for (int i = 0; i < ConcurrentTasks; i++)
+            {
+                tasks[i] = Task.Run(async () =>
+                {
+                    await using (await asyncLock.AcquireAsync())
+                    {
+                        await Task.Delay(LockHoldTimeMs); // Use the parameterized LockHoldTimeMs
+                    }
+                });
+            }
+            await Task.WhenAll(tasks);
+        }
+
+        [GlobalCleanup]
+        public Task Cleanup()
+        {
+            _asyncLock?.DisposeAsync();
+            _fifoLock?.DisposeAsync();
+            _lifoLock?.DisposeAsync();
+            _priorityLockConstant?.DisposeAsync();
+            _priorityLockCounterFifo?.DisposeAsync();
+            _priorityLockRandom?.DisposeAsync();
+            _priorityLockHighLow?.DisposeAsync();
+            return Task.CompletedTask;
         }
     }
 }
