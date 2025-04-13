@@ -68,7 +68,7 @@ jobs:
     - name: Run unit tests
       run: |
         cd Tests/Benchmarking.Tests
-        dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj -v detailed
+        dotnet test --configuration Release BenchmarkingSandbox.Tests.csproj
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v3
