@@ -3,4 +3,4 @@
 	url = https://github.com/ulfbou/Async.Collections.git
 [submodule "Src/Async.Locks"]
 	path = Src/Async.Locks
-	url = https://github.com/ulfbou/Async.Locks.git
+	url = https://github.com/ulfbou/Async.Locks
