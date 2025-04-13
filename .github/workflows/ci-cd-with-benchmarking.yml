@@ -87,9 +87,6 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
 
-    - name: List files in working directory
-      run: ls -R ${{ github.workspace }}/Src/Benchmarking.Runner
-
     - name: Checkout submodules
       run: git submodule update --init --recursive --depth=0
 
@@ -100,6 +97,9 @@ jobs:
 
     - name: Change working directory
       run: cd ${{ github.workspace }}/Src/Benchmarking.Runner
+
+    - name: Build Benchmark Project
+      run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
 
     - name: Run benchmarks
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
