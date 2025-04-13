@@ -15,7 +15,7 @@ namespace BenchmarkingSandbox.Runner
     {
         private AsyncLock _asyncLock = null!;
         private AsyncLock _fifoLock = null!;
-        //private AsyncLock _lifoLock = null!;
+        private AsyncLock _lifoLock = null!;
 
         [Params(1, 5, 10, 50, 100)]
         public int ConcurrentTasks { get; set; }
@@ -31,7 +31,7 @@ namespace BenchmarkingSandbox.Runner
         {
             _asyncLock = new AsyncLock();
             _fifoLock = new AsyncLock(new FifoLockQueueStrategy());
-            //_lifoLock = new AsyncLock(new LifoLockQueueStrategy());
+            _lifoLock = new AsyncLock(new LifoLockQueueStrategy());
         }
 
         [BenchmarkCategory("AcquireRelease")]
@@ -76,21 +76,21 @@ namespace BenchmarkingSandbox.Runner
             await Task.WhenAll(tasks);
         }
 
-        //[BenchmarkCategory("AcquireRelease_Lifo")]
-        //[Benchmark]
-        //public async Task AcquireRelease_Concurrent_Lifo()
-        //{
-        //    var tasks = Enumerable.Range(0, ConcurrentTasks)
-        //        .Select(async _ =>
-        //        {
-        //            await Task.Delay(InitialDelayMilliseconds);
-        //            await using (await _lifoLock.AcquireAsync())
-        //            {
-        //                await Task.Delay(1);
-        //            }
-        //        }).ToArray();
-        //    await Task.WhenAll(tasks);
-        //}
+        [BenchmarkCategory("AcquireRelease_Lifo")]
+        [Benchmark]
+        public async Task AcquireRelease_Concurrent_Lifo()
+        {
+            var tasks = Enumerable.Range(0, ConcurrentTasks)
+                .Select(async _ =>
+                {
+                    await Task.Delay(InitialDelayMilliseconds);
+                    await using (await _lifoLock.AcquireAsync())
+                    {
+                        await Task.Delay(1);
+                    }
+                }).ToArray();
+            await Task.WhenAll(tasks);
+        }
 
         [BenchmarkCategory("TryAcquireTimeout")]
         [Benchmark]
