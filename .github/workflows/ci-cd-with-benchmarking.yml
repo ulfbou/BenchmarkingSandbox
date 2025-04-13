@@ -96,7 +96,7 @@ jobs:
         dotnet-version: '9.0.x'
 
     - name: Change working directory
-      run: cd ${{ github.workspace }}/Src/Benchmarking/Runner
+      run: cd ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: Run benchmarks
       run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
@@ -105,8 +105,8 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: benchmark-results
-        path: ${{ github.workspace }}/Src/Benchmarking/Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
-
+        path: ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
+  
   dockerize:
     needs: [build, test, benchmark]
     runs-on: ubuntu-latest
