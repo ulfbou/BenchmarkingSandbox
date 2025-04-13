@@ -23,7 +23,7 @@ namespace BenchmarkingSandbox.Runner
         private AsyncLock _asyncLock = null!;
         private AsyncLockMonitor _monitor = null!;
         private int _resource = 0;
-        private const int MaxTaskCount = 100; // Limit concurrent tasks
+        private const int MaxTaskCount = 100;
 
         [Params(1, 5, 10, 50, MaxTaskCount)]
         public int ConcurrentTasks { get; set; }
@@ -37,7 +37,6 @@ namespace BenchmarkingSandbox.Runner
         [GlobalSetup]
         public void Setup()
         {
-            // Ask AsyncLock to monitor by setting shouldMonitor to true
             _asyncLock = new AsyncLock(shouldMonitor: true);
             _monitor = new AsyncLockMonitor();
             _monitor.Enable();
@@ -82,7 +81,6 @@ namespace BenchmarkingSandbox.Runner
             }
             await Task.WhenAll(tasks);
 
-            // Analyze _monitor.GetEvents() here for queuing details
             var events = _monitor.GetEvents();
 
             foreach (var e in events)
@@ -202,9 +200,6 @@ namespace BenchmarkingSandbox.Runner
                     }
                     catch (TimeoutException)
                     {
-                        // Handle if your AcquireAsync throws TimeoutException on cancellation
-                        // This is not expected in this scenario, but you can log or handle it if needed
-
                         Console.WriteLine($"Task {Task.CurrentId} timed out.");
                         Interlocked.Increment(ref cancelledCount);
                     }
@@ -212,7 +207,6 @@ namespace BenchmarkingSandbox.Runner
             }
             await Task.WhenAll(tasks);
 
-            // Assert on cancelledCount for validation
             if (cancelledCount > 0)
             {
                 Console.WriteLine($"Cancelled tasks: {cancelledCount}");
