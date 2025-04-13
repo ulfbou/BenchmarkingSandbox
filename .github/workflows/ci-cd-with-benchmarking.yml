@@ -87,6 +87,9 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
 
+    - name: List files in working directory
+      run: ls -R ${{ github.workspace }}/Src/Benchmarking.Runner
+
     - name: Checkout submodules
       run: git submodule update --init --recursive --depth=0
 
