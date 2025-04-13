@@ -98,6 +98,15 @@ jobs:
     - name: Change working directory
       run: cd ${{ github.workspace }}/Src/Benchmarking.Runner
 
+    - name: (Debug) Print current working directory
+      run: pwd
+
+    - name: (Debug) List files in the (supposed) working directory - More detail
+      run: ls -la
+
+    - name: (Debug) Check if the project file exists directly
+      run: test -f BenchmarkingSandbox.Runner.csproj && echo "Project file EXISTS" || echo "Project file DOES NOT EXIST"
+
     - name: Build Benchmark Project
       run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
 
