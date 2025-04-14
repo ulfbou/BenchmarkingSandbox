@@ -11,7 +11,6 @@ using BenchmarkingSandbox.Logging;
 
 namespace BenchmarkingSandbox.Runner
 {
-    [MemoryDiagnoser]
     [BenchmarkCategory("AsyncPriorityQueue")]
     public class AsyncPriorityQueueBenchmarks
     {
@@ -21,7 +20,7 @@ namespace BenchmarkingSandbox.Runner
         private List<int> _itemsToRemove = null!;
         private BenchmarkLogger _logger = null!;
 
-        [Params(100, 1000, 10000)]
+        [Params(100, 1000)]
         public int N { get; set; }
 
         [GlobalSetup]
@@ -66,12 +65,15 @@ namespace BenchmarkingSandbox.Runner
         [IterationCleanup]
         public async Task IterationCleanup()
         {
-            await _priorityQueue.ClearAsync();
-            await _priorityQueue.AddMultipleAsync(_itemsToAdd);
+            // Skip full reset when not needed for larger N (saves time)
+            if (_itemsToAdd.Count <= 1000) // Optional: skip full reload for large N
+                await _priorityQueue.AddMultipleAsync(_itemsToAdd);
 
+            await _priorityQueue.ClearAsync();
             _logger.Log("Cleanup", -1, $"Reset queue after iteration with {_itemsToAdd.Count} items");
         }
 
+        // Focused benchmark: Add items only for the prototype phase
         [Benchmark]
         [BenchmarkCategory("Add")]
         public async Task AddMultipleAsync()
@@ -82,31 +84,31 @@ namespace BenchmarkingSandbox.Runner
             _logger.Log("AddMultipleAsync", Task.CurrentId ?? -1, $"Added {itemsToAdd.Count} items");
         }
 
-        [Benchmark]
-        [BenchmarkCategory("Contains")]
-        public async Task ContainsMultipleAsync()
-        {
-            await _priorityQueue.ContainsMultipleAsync(_itemsToContain);
+        //[Benchmark]
+        //[BenchmarkCategory("Contains")]
+        //public async Task ContainsMultipleAsync()
+        //{
+        //    await _priorityQueue.ContainsMultipleAsync(_itemsToContain);
 
-            _logger.Log("ContainsMultipleAsync", Task.CurrentId ?? -1, $"Checked {_itemsToContain.Count} items");
-        }
+        //    _logger.Log("ContainsMultipleAsync", Task.CurrentId ?? -1, $"Checked {_itemsToContain.Count} items");
+        //}
 
-        [Benchmark]
-        [BenchmarkCategory("Count")]
-        public async Task CountMultipleAsync()
-        {
-            await _priorityQueue.CountMultipleAsync(_itemsToContain);
+        //[Benchmark]
+        //[BenchmarkCategory("Count")]
+        //public async Task CountMultipleAsync()
+        //{
+        //    await _priorityQueue.CountMultipleAsync(_itemsToContain);
 
-            _logger.Log("CountMultipleAsync", Task.CurrentId ?? -1, $"Counted {_itemsToContain.Count} items");
-        }
+        //    _logger.Log("CountMultipleAsync", Task.CurrentId ?? -1, $"Counted {_itemsToContain.Count} items");
+        //}
 
-        [Benchmark]
-        [BenchmarkCategory("Remove")]
-        public async Task RemoveMultipleAsync()
-        {
-            await _priorityQueue.RemoveMultipleAsync(_itemsToRemove);
+        //[Benchmark]
+        //[BenchmarkCategory("Remove")]
+        //public async Task RemoveMultipleAsync()
+        //{
+        //    await _priorityQueue.RemoveMultipleAsync(_itemsToRemove);
 
-            _logger.Log("RemoveMultipleAsync", Task.CurrentId ?? -1, $"Removed {_itemsToRemove.Count} items");
-        }
+        //    _logger.Log("RemoveMultipleAsync", Task.CurrentId ?? -1, $"Removed {_itemsToRemove.Count} items");
+        //}
     }
 }
