@@ -9,6 +9,7 @@ using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 
+using BenchmarkingSandbox.Logging;
 using BenchmarkingSandbox.Runner;
 
 using Perfolizer.Horology;
@@ -40,6 +41,8 @@ namespace Benchmarking.Runner
                 .AddDiagnoser(ThreadingDiagnoser.Default)
                 .AddDiagnoser(MemoryDiagnoser.Default);
 
+            Console.WriteLine($"{DateTime.Now}: Starting benchmarks with a timeout of {timeoutMinutes} minute(s).");
+
             try
             {
                 Task.WaitAll(new[]
@@ -51,6 +54,10 @@ namespace Benchmarking.Runner
             catch (OperationCanceledException)
             {
                 Console.Error.WriteLine($"Benchmark execution cancelled after timeout of {timeoutMinutes} minute(s).");
+            }
+            finally
+            {
+                Console.WriteLine($"{DateTime.Now}: All benchmarks completed.");
             }
         }
 
