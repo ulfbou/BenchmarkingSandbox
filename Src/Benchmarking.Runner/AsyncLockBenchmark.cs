@@ -6,29 +6,21 @@ using Async.Locks.Events;
 using Async.Locks.Monitoring;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Exporters;
-using BenchmarkDotNet.Exporters.Csv;
-using BenchmarkDotNet.Exporters.Json;
-using BenchmarkDotNet.Order;
-using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 using BenchmarkingSandbox.Logging;
 
+using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
-    [MinIterationTime(200)]
-    [ThreadingDiagnoser]
-    [RankColumn]
-    [CategoriesColumn]
     [BenchmarkCategory("AsyncLock")]
-    [Orderer(SummaryOrderPolicy.FastestToSlowest)]
-    [HideColumns("Error", "StdDev", "Median")]
-    [MarkdownExporter, HtmlExporter, CsvExporter, JsonExporter]
     public class AsyncLockBenchmark
     {
         private AsyncLock _asyncLock = null!;

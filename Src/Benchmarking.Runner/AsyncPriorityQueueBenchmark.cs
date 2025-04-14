@@ -12,6 +12,7 @@ using BenchmarkingSandbox.Logging;
 namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
+    [BenchmarkCategory("AsyncPriorityQueue")]
     public class AsyncPriorityQueueBenchmarks
     {
         private AsyncPriorityQueue<int, int> _priorityQueue = null!;
@@ -27,9 +28,23 @@ namespace BenchmarkingSandbox.Runner
         public void GlobalSetup()
         {
             _priorityQueue = new AsyncPriorityQueue<int, int>(i => i);
-            _itemsToAdd = Enumerable.Range(0, N).ToList();
-            _itemsToContain = Enumerable.Range(N / 4, N / 2).ToList();
-            _itemsToRemove = Enumerable.Range(0, N / 3).ToList();
+            _itemsToAdd = new List<int>(N);
+            _itemsToContain = new List<int>(N / 2);
+            _itemsToRemove = new List<int>(N / 3);
+
+            for (int i = 0; i < N; i++)
+            {
+                _itemsToAdd.Add(i);
+                if (i >= N / 4 && i < N / 4 + N / 2)
+                {
+                    _itemsToContain.Add(i);
+                }
+
+                if (i < N / 3)
+                {
+                    _itemsToRemove.Add(i);
+                }
+            }
 
             _logger = new BenchmarkLogger(nameof(AsyncPriorityQueueBenchmarks));
             _logger.Log("Setup", -1, $"Initialized with N={N}");
@@ -52,16 +67,13 @@ namespace BenchmarkingSandbox.Runner
         public async Task IterationCleanup()
         {
             await _priorityQueue.ClearAsync();
-
-            foreach (var item in _itemsToAdd)
-            {
-                await _priorityQueue.AddAsync(item);
-            }
+            await _priorityQueue.AddMultipleAsync(_itemsToAdd);
 
             _logger.Log("Cleanup", -1, $"Reset queue after iteration with {_itemsToAdd.Count} items");
         }
 
         [Benchmark]
+        [BenchmarkCategory("Add")]
         public async Task AddMultipleAsync()
         {
             var itemsToAdd = Enumerable.Range(N, N).ToList();
@@ -71,6 +83,7 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [Benchmark]
+        [BenchmarkCategory("Contains")]
         public async Task ContainsMultipleAsync()
         {
             await _priorityQueue.ContainsMultipleAsync(_itemsToContain);
@@ -79,6 +92,7 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [Benchmark]
+        [BenchmarkCategory("Count")]
         public async Task CountMultipleAsync()
         {
             await _priorityQueue.CountMultipleAsync(_itemsToContain);
@@ -87,6 +101,7 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [Benchmark]
+        [BenchmarkCategory("Remove")]
         public async Task RemoveMultipleAsync()
         {
             await _priorityQueue.RemoveMultipleAsync(_itemsToRemove);
