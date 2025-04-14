@@ -83,8 +83,8 @@ jobs:
     strategy:
       matrix:
         benchmark:
-        - AsyncLockBenchmark
-        - AsyncPriorityQueueBenchmarks
+          - AsyncLockBenchmark
+          - AsyncPriorityQueueBenchmarks
         paramSet: [Small, Medium, Large]
 
     steps:
@@ -104,40 +104,71 @@ jobs:
         run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
-      - name: Run filtered benchmarks (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter ${{ matrix.benchmark }} -- ${{ matrix.paramSet }}
+      - name: Create Logs Directory
+        run: mkdir -p ${{ github.workspace }}/logs/benchmark-logs
+
+      - name: Run filtered benchmarks (AsyncLock)
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark*" -- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 15
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/AsyncLock-CI
+          LOGS_ROOT_PATH: ${{ github.workspace }}
+
+      - name: Run filtered AsyncLock benchmarks
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark*" -- --ConcurrentTasks 1,3 --TimeoutMs 0,5 --CancellationDelay 0 --IterationCount 3 --WarmupCount 1
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        timeout-minutes: 15
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/AsyncLock-CI
+          LOGS_ROOT_PATH: ${{ github.workspace }}
+
+#      - name: Run filtered benchmarks (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
+#        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter ${{ matrix.benchmark }} -- ${{ matrix.paramSet }}
+#        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+#        timeout-minutes: 15
+#        env:
+#          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+#          LOGS_ROOT_PATH: ${{ github.workspace }}
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ matrix.benchmark }}-${{ matrix.paramSet }}
-          path: |
-            ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
-            ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.md
-            ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.csv
+          path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}
 
       - name: Compare Against Baseline (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
         run: |
           BASELINE_PATH=${{ github.workspace }}/Baselines/${{ matrix.benchmark }}-${{ matrix.paramSet }}.json
           if [ -f "$BASELINE_PATH" ]; then
-            dotnet run --project ${{ github.workspace }}/tools/BenchmarkComparer.csproj -- $BASELINE_PATH ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*${{ matrix.benchmark }}*.json --threshold 5
+            dotnet run --project ${{ github.workspace }}/tools/BenchmarkComparer.csproj -- $BASELINE_PATH ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}/*.json --threshold 5
           else
             echo "Baseline not found, skipping regression check for ${{ matrix.benchmark }} - ${{ matrix.paramSet }}."
           fi
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Create Log Directory for Summaries
+        run: mkdir -p ${{ github.workspace }}/logs/summaries
 
       - name: Export Markdown Summary (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
         run: |
-          cp ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/summary.md ${{ github.workspace }}/benchmark-summary-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          LATEST_MD=$(ls -t ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}/*.md | head -n 1)
+          if [ -n "$LATEST_MD" ]; then
+            cp "$LATEST_MD" ${{ github.workspace }}/logs/summaries/summary-md-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          else
+            echo "No Markdown summary found for ${{ matrix.benchmark }} - ${{ matrix.paramSet }}."
+            touch ${{ github.workspace }}/logs/summaries/summary-md-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          fi
         if: github.event_name == 'pull_request'
 
       - name: Upload Markdown Summary (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
         uses: actions/upload-artifact@v4
         with:
           name: summary-md-${{ matrix.benchmark }}-${{ matrix.paramSet }}
-          path: ${{ github.workspace }}/benchmark-summary-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          path: ${{ github.workspace }}/logs/summaries/summary-md-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
         if: github.event_name == 'pull_request'
 
   summarize-benchmarks:
@@ -147,26 +178,28 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        path: ${{ github.workspace }}/summaries
+        pattern: summary-md-*
+        path: ${{ github.workspace }}/logs/summaries
 
     - name: Merge Summaries
       run: |
-        find ${{ github.workspace }}/summaries -name "summary-md-*.md" -print0 | while IFS= read -r -d $'\0' file; do
-          echo "--- $file ---" >> ${{ github.workspace }}/full-summary.md
-          cat "$file" >> ${{ github.workspace }}/full-summary.md
-          echo "" >> ${{ github.workspace }}/full-summary.md
+        mkdir -p ${{ github.workspace }}/logs/full-summary
+        find ${{ github.workspace }}/logs/summaries -name "*.md" -print0 | while IFS= read -r -d $'\0' file; do
+          echo "--- $file ---" >> ${{ github.workspace }}/logs/full-summary/full-summary.md
+          cat "$file" >> ${{ github.workspace }}/logs/full-summary/full-summary.md
+          echo "" >> ${{ github.workspace }}/logs/full-summary/full-summary.md
         done
-        if [ -s "${{ github.workspace }}/full-summary.md" ]; then
+        if [ -s "${{ github.workspace }}/logs/full-summary/full-summary.md" ]; then
           echo "Full summary generated."
         else
           echo "No benchmark summary files found."
-          touch ${{ github.workspace }}/full-summary.md
+          touch ${{ github.workspace }}/logs/full-summary/full-summary.md
         fi
 
     - name: Comment on PR
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        path: ${{ github.workspace }}/full-summary.md
+        path: ${{ github.workspace }}/logs/full-summary/full-summary.md
 
   dockerize:
     needs: [build, test, benchmark]
