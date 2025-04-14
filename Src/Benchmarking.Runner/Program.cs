@@ -19,8 +19,19 @@ namespace Benchmarking.Runner
     {
         public static void Main(string[] args)
         {
+            var timeoutMinutes = TryParseTimeoutArg(args, defaultMinutes: 15);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMinutes));
+            var token = cts.Token;
+
+            var shortJob = Job.Dry
+                .WithIterationCount(3)
+                .WithWarmupCount(1)
+                .WithInvocationCount(1)
+                .WithUnrollFactor(1)
+                .WithMinIterationTime(TimeInterval.FromMilliseconds(50));
+
             var config = ManualConfig.Create(DefaultConfig.Instance)
-                .AddJob(Job.ShortRun.WithMinIterationTime(TimeInterval.FromMilliseconds(50)))
+                .AddJob(shortJob)
                 .AddExporter(JsonExporter.Full)
                 .AddExporter(CsvExporter.Default)
                 .AddColumn(StatisticColumn.Min)
@@ -29,8 +40,26 @@ namespace Benchmarking.Runner
                 .AddDiagnoser(ThreadingDiagnoser.Default)
                 .AddDiagnoser(MemoryDiagnoser.Default);
 
-            var priorityQueueSummary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config);
-            var lockSummary = BenchmarkRunner.Run<AsyncLockBenchmark>(config);
+            try
+            {
+                Task.WaitAll(new[]
+                {
+                    Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token),
+                    Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token)
+                }, token);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine($"Benchmark execution cancelled after timeout of {timeoutMinutes} minute(s).");
+            }
+        }
+
+        private static int TryParseTimeoutArg(string[] args, int defaultMinutes)
+        {
+            if (args.Length > 0 && int.TryParse(args[0], out var parsed) && parsed > 0)
+                return parsed;
+
+            return defaultMinutes;
         }
     }
 }
