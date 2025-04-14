@@ -15,6 +15,7 @@ using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 using BenchmarkingSandbox.Logging;
+
 using System.Runtime.CompilerServices;
 
 namespace BenchmarkingSandbox.Runner
