@@ -18,7 +18,7 @@ jobs:
         repository: ${{ github.repository }}
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
-        fetch-depth: 0 # Ensure a full clone
+        fetch-depth: 0
 
     - name: Get short SHA
       id: get_sha
@@ -78,17 +78,19 @@ jobs:
   benchmark:
     needs: build
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
     strategy:
       matrix:
         benchmark:
           - AsyncLockBenchmark
           - AsyncPriorityQueueBenchmarks
+        paramSet: [Small, Medium, Large]
 
     steps:
     - uses: actions/checkout@v3
       with:
-        repository: ${{ github.repository }}
-        token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
 
     - name: Checkout submodules
@@ -103,8 +105,8 @@ jobs:
       run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
       working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
-    - name: Run benchmarks
-      run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter *${{ matrix.benchmark }}*
+    - name: Run filtered benchmarks
+      run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter *${{ matrix.benchmark }}* -- ${{ matrix.paramSet }}
       working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
       timeout-minutes: 15
 
@@ -114,8 +116,156 @@ jobs:
         name: benchmark-results
         path: |
           ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.md
           ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.csv
-  
+
+    - name: Compare Against Baseline
+      run: dotnet run --project tools/BenchmarkComparer.csproj -- baseline.json BenchmarkDotNet.Artifacts/results/${{ matrix.benchmark }}.json --threshold 5
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      continue-on-error: false
+
+    - name: Comment Benchmark Summary on PR
+      if: github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        path: ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/summary.md
+
+  publish-benchmarks:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Download benchmark results
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-results
+        path: ./pages/benchmarks
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@github.com"
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./pages/benchmarks
+
+  persist_and_analyze_benchmark_results:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    steps:
+    - name: Convert Benchmark Results to Markdown
+      run: |
+        dotnet tool install --global BenchmarkDotNet.Analyser
+        benchmarkdotnet-analyser summarize \
+          --input ./bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json \
+          --output benchmarks-summary.md
+      with:
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+
+    - name: Upload Summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-summary
+        path: benchmarks-summary.md
+
+  benchmark:
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
+    strategy:
+      matrix:
+        benchmark:
+          - AsyncLockBenchmark
+          - AsyncPriorityQueueBenchmarks
+        paramSet: [Small, Medium, Large] # adjust based on your workload classes
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Checkout submodules
+      run: git submodule update --init --recursive --depth=0
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Build Benchmark Project
+      run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+
+    - name: Run filtered benchmarks
+      run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter *${{ matrix.benchmark }}* -- ${{ matrix.paramSet }}
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      timeout-minutes: 15
+
+    - name: Upload Benchmark Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.md
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.csv
+
+    - name: Compare Against Baseline
+      run: dotnet run --project tools/BenchmarkComparer.csproj -- baseline.json BenchmarkDotNet.Artifacts/results/${{ matrix.benchmark }}.json --threshold 5
+      working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      continue-on-error: false
+
+    - name: Comment Benchmark Summary on PR
+      if: github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        path: ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/summary.md
+
+  publish-benchmarks:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Download benchmark results
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-results
+        path: ./pages/benchmarks
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@github.com"
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./pages/benchmarks
+  fail_on_performance_regression:
+    needs: persist_and_analyze_benchmark_results
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fail on Performance Regression
+      run: |
+        benchmarkdotnet-analyser compare \
+        --baseline baseline/benchmarks-baseline.json \
+            --current Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json \
+            --threshold 5
+
   dockerize:
     needs: [build, test, benchmark]
     runs-on: ubuntu-latest
