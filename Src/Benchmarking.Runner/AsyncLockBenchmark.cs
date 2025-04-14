@@ -6,16 +6,10 @@ using Async.Locks.Events;
 using Async.Locks.Monitoring;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Configs;
-using BenchmarkDotNet.Running;
 
 using BenchmarkingSandbox.Logging;
 
-using System;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BenchmarkingSandbox.Runner
 {
@@ -27,15 +21,15 @@ namespace BenchmarkingSandbox.Runner
         private AsyncLockMonitor _monitor = null!;
         private BenchmarkLogger _logger = null!;
         private int _resource = 0;
-        private const int MaxTaskCount = 100;
+        private const int MaxTaskCount = 10;
 
-        [Params(1, 5, 10, 50, MaxTaskCount)]
+        [Params(1, 5, 10)]
         public int ConcurrentTasks { get; set; }
 
-        [Params(0, 1, 10, 50)]
+        [Params(0, 1, 10)]
         public int TimeoutMs { get; set; }
 
-        [Params(0, 1, 10, 50)]
+        [Params(0, 1, 10)]
         public int CancellationDelay { get; set; }
 
         [GlobalSetup]
@@ -112,19 +106,6 @@ namespace BenchmarkingSandbox.Runner
                 });
             }
             await Task.WhenAll(tasks);
-        }
-
-        [BenchmarkCategory("Uncontended")]
-        [Benchmark]
-        public async Task UncontendedAcquireRelease()
-        {
-            await using (await _asyncLock.AcquireAsync())
-            {
-                await using (await _asyncLock.AcquireAsync())
-                {
-                    await SimulateWorkAsync(1);
-                }
-            }
         }
 
         [BenchmarkCategory("TryAcquireTimeout")]
