@@ -1,4 +1,4 @@
-﻿// Copyright (c) Ulf Bourelius. All rights reserved.
+// Copyright (c) Ulf Bourelius. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using BenchmarkDotNet.Configs;
@@ -10,14 +10,17 @@ using Benchmarking.Runners;
 
 using BenchmarkingSandbox.Runner;
 
-public class Program
+namespace Benchmarking.Runner
 {
-    public static void Main(string[] args)
+    public class Program
     {
-        var config = ManualConfig.Create(DefaultConfig.Instance)
-            .AddExporter(JsonExporter.Full)
-            .AddExporter(CsvExporter.Default);
-        var priorityQueueSummary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>();
-        var lockSummary = BenchmarkRunner.Run<AsyncLockBenchmark>();
+        public static void Main(string[] args)
+        {
+            var config = ManualConfig.Create(DefaultConfig.Instance)
+                .AddExporter(JsonExporter.Full)
+                .AddExporter(CsvExporter.Default);
+            var priorityQueueSummary = BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>();
+            var lockSummary = BenchmarkRunner.Run<AsyncLockBenchmark>();
+        }
     }
 }
