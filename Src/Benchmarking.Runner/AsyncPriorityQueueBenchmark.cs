@@ -63,13 +63,14 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [IterationCleanup]
-        public async Task IterationCleanup()
+        public void IterationCleanup()
         {
-            // Skip full reset when not needed for larger N (saves time)
-            if (_itemsToAdd.Count <= 1000) // Optional: skip full reload for large N
-                await _priorityQueue.AddMultipleAsync(_itemsToAdd);
+            if (_itemsToAdd.Count <= 1000)
+            {
+                _priorityQueue.AddMultipleAsync(_itemsToAdd).Wait();
+            }
 
-            await _priorityQueue.ClearAsync();
+            _priorityQueue.ClearAsync().AsTask().Wait();
             _logger.Log("Cleanup", -1, $"Reset queue after iteration with {_itemsToAdd.Count} items");
         }
 
