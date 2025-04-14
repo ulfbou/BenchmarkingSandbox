@@ -78,6 +78,12 @@ jobs:
   benchmark:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        benchmark:
+          - AsyncLockBenchmark
+          - AsyncPriorityQueueBenchmarks
+
     steps:
     - uses: actions/checkout@v3
       with:
@@ -98,14 +104,17 @@ jobs:
       working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
     - name: Run benchmarks
-      run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release
+      run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter *${{ matrix.benchmark }}*
       working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      timeout-minutes: 15
 
     - name: Upload Benchmark Results
       uses: actions/upload-artifact@v4
       with:
         name: benchmark-results
-        path: ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
+        path: |
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.json
+          ${{ github.workspace }}/Src/Benchmarking.Runner/bin/Release/net9.0/BenchmarkDotNet.Artifacts/results/*.csv
   
   dockerize:
     needs: [build, test, benchmark]
