@@ -6,22 +6,33 @@ using Async.Locks.Events;
 using Async.Locks.Monitoring;
 
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Exporters;
+using BenchmarkDotNet.Exporters.Csv;
+using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Order;
-using BenchmarkDotNet.Diagnosers;
+using BenchmarkDotNet.Columns;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Running;
+
+using BenchmarkingSandbox.Logging;
+using System.Runtime.CompilerServices;
 
 namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
+    [MinIterationTime(200)]
     [ThreadingDiagnoser]
     [RankColumn]
+    [CategoriesColumn]
+    [BenchmarkCategory("AsyncLock")]
     [Orderer(SummaryOrderPolicy.FastestToSlowest)]
-    [WarmupCount(10)]
-    [IterationCount(20)]
-    [InvocationCount(8)]
+    [HideColumns("Error", "StdDev", "Median")]
+    [MarkdownExporter, HtmlExporter, CsvExporter, JsonExporter]
     public class AsyncLockBenchmark
     {
         private AsyncLock _asyncLock = null!;
         private AsyncLockMonitor _monitor = null!;
+        private BenchmarkLogger _logger = null!;
         private int _resource = 0;
         private const int MaxTaskCount = 100;
 
@@ -40,12 +51,14 @@ namespace BenchmarkingSandbox.Runner
             _asyncLock = new AsyncLock(shouldMonitor: true);
             _monitor = new AsyncLockMonitor();
             _monitor.Enable();
+            _logger = new BenchmarkLogger(nameof(AsyncLockBenchmark));
         }
 
         [GlobalCleanup]
         public void Cleanup()
         {
             _monitor?.Dispose();
+            _logger?.Dispose();
         }
 
         [BenchmarkCategory("AcquireRelease")]
@@ -54,7 +67,7 @@ namespace BenchmarkingSandbox.Runner
         {
             await using (await _asyncLock.AcquireAsync())
             {
-                await Task.Delay(1);
+                await SimulateWorkAsync(1);
             }
         }
 
@@ -68,12 +81,11 @@ namespace BenchmarkingSandbox.Runner
                 tasks[i] = Task.Run(async () =>
                 {
                     var taskId = Task.CurrentId ?? 0;
-
                     AsyncLockEvents.Log.TaskStarted(taskId);
                     await using (await _asyncLock.AcquireAsync())
                     {
                         AsyncLockEvents.Log.LockAcquired(taskId);
-                        await Task.Delay(1);
+                        await SimulateWorkAsync(1);
                         AsyncLockEvents.Log.LockReleased(taskId);
                     }
                     AsyncLockEvents.Log.TaskCompleted(taskId);
@@ -82,12 +94,10 @@ namespace BenchmarkingSandbox.Runner
             await Task.WhenAll(tasks);
 
             var events = _monitor.GetEvents();
-
             foreach (var e in events)
             {
-                Console.WriteLine($"Event: {e.EventName}, TaskId: {e.TaskId}, Timestamp: {e.Timestamp}");
+                _logger.Log("AsyncLockMonitor", e.TaskId, $"Event: {e.EventName}, Timestamp: {e.Timestamp}");
             }
-
             _monitor.Reset();
         }
 
@@ -103,7 +113,7 @@ namespace BenchmarkingSandbox.Runner
                     await using (await _asyncLock.AcquireAsync())
                     {
                         Interlocked.Increment(ref _resource);
-                        await Task.Delay(1);
+                        await SimulateWorkAsync(1);
                         Interlocked.Decrement(ref _resource);
                     }
                 });
@@ -119,7 +129,7 @@ namespace BenchmarkingSandbox.Runner
             {
                 await using (await _asyncLock.AcquireAsync())
                 {
-                    await Task.Delay(1);
+                    await SimulateWorkAsync(1);
                 }
             }
         }
@@ -130,7 +140,7 @@ namespace BenchmarkingSandbox.Runner
         {
             await using (await _asyncLock.AcquireAsync(TimeSpan.FromMilliseconds(TimeoutMs > 0 ? TimeoutMs : Timeout.Infinite)))
             {
-                await Task.Delay(1);
+                await SimulateWorkAsync(1);
             }
         }
 
@@ -146,7 +156,7 @@ namespace BenchmarkingSandbox.Runner
                     {
                         await using (await _asyncLock.AcquireAsync(timeout))
                         {
-                            await Task.Delay(1);
+                            await SimulateWorkAsync(1);
                         }
                     }
                     catch (TimeoutException)
@@ -166,7 +176,7 @@ namespace BenchmarkingSandbox.Runner
             {
                 await using (await _asyncLock.AcquireAsync(cancellationToken: cts.Token))
                 {
-                    await Task.Delay(10);
+                    await SimulateWorkAsync(10);
                 }
             }
             catch (TaskCanceledException)
@@ -191,7 +201,7 @@ namespace BenchmarkingSandbox.Runner
                     {
                         await using (await _asyncLock.AcquireAsync(cancellationToken: cts.Token))
                         {
-                            await Task.Delay(10);
+                            await SimulateWorkAsync(10);
                         }
                     }
                     catch (TaskCanceledException)
@@ -200,21 +210,17 @@ namespace BenchmarkingSandbox.Runner
                     }
                     catch (TimeoutException)
                     {
-                        Console.WriteLine($"Task {Task.CurrentId} timed out.");
+                        _logger.Log("AsyncLockMonitor", Task.CurrentId ?? 0, $"Task {Task.CurrentId} timed out.");
                         Interlocked.Increment(ref cancelledCount);
                     }
                 });
             }
             await Task.WhenAll(tasks);
 
-            if (cancelledCount > 0)
-            {
-                Console.WriteLine($"Cancelled tasks: {cancelledCount}");
-            }
-            else
-            {
-                Console.WriteLine("No tasks were cancelled.");
-            }
+            _logger.Log("AsyncLockMonitor", 0, $"Cancelled tasks: {cancelledCount}");
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Task SimulateWorkAsync(int delayMs = 1) => Task.Delay(delayMs);
     }
 }
