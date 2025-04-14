@@ -38,9 +38,24 @@ namespace BenchmarkingSandbox.Logging
 
         private async Task ProcessQueueAsync()
         {
-            foreach (var line in _logQueue.GetConsumingEnumerable(_cts.Token))
+            try
             {
-                await _writer.WriteLineAsync(line);
+                foreach (var line in _logQueue.GetConsumingEnumerable(_cts.Token))
+                {
+                    await _writer.WriteLineAsync(line);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when _cts.Cancel() is called
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BenchmarkLogger Error] Exception during log writing: {ex}");
+            }
+            finally
+            {
+                await _writer.FlushAsync();
             }
         }
 
