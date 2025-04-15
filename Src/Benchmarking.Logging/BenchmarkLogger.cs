@@ -5,6 +5,9 @@ using System.Collections.Concurrent;
 
 namespace BenchmarkingSandbox.Logging
 {
+    /// <summary>
+    /// A logger for benchmarking tasks that writes logs to a file.
+    /// </summary>
     public sealed class BenchmarkLogger : IDisposable
     {
         private readonly BlockingCollection<string> _logQueue = new();
@@ -14,6 +17,11 @@ namespace BenchmarkingSandbox.Logging
         private readonly CancellationTokenSource _cts = new();
         private readonly string _logFilePath;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BenchmarkLogger"/> class.
+        /// </summary>
+        /// <param name="category">The category of the benchmark.</param>
+        /// <param name="rootLogPath">The root path for log files. If null, defaults to the current directory.</param>
         public BenchmarkLogger(string category, string? rootLogPath = null)
         {
             _logFilePath = Initialize(category, rootLogPath);
@@ -25,6 +33,33 @@ namespace BenchmarkingSandbox.Logging
 
             Console.WriteLine($"[BenchmarkLogger] Logging to {_logFilePath}");
             _writerTask = Task.Run(ProcessQueueAsync);
+        }
+
+        /// <summary>
+        /// Logs a message with the specified category and task ID.
+        /// </summary>
+        /// <param name="category">The category of the log message.</param>
+        /// <param name="taskId">The ID of the task.</param>
+        /// <param name="message">The log message.</param>
+        public void Log(string category, int taskId, string message)
+        {
+            var line = $"[{DateTime.UtcNow:O}] [{category}] [Task:{taskId}] {message}";
+            _logQueue.Add(line);
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            _logQueue.CompleteAdding();
+            _cts.Cancel();
+            try
+            {
+                _writerTask.Wait();
+            }
+            catch { /* ignore */ }
+
+            _writer.Dispose();
+            _cts.Dispose();
         }
 
         private string Initialize(string category, string? rootLogPath)
@@ -51,12 +86,6 @@ namespace BenchmarkingSandbox.Logging
             return Path.Combine(baseLogDirectory, logFileName);
         }
 
-        public void Log(string category, int taskId, string message)
-        {
-            var line = $"[{DateTime.UtcNow:O}] [{category}] [Task:{taskId}] {message}";
-            _logQueue.Add(line);
-        }
-
         private async Task ProcessQueueAsync()
         {
             try
@@ -78,20 +107,6 @@ namespace BenchmarkingSandbox.Logging
             {
                 await _writer.FlushAsync();
             }
-        }
-
-        public void Dispose()
-        {
-            _logQueue.CompleteAdding();
-            _cts.Cancel();
-            try
-            {
-                _writerTask.Wait();
-            }
-            catch { /* ignore */ }
-
-            _writer.Dispose();
-            _cts.Dispose();
         }
     }
 }
