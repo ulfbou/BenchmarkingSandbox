@@ -14,20 +14,41 @@ namespace BenchmarkingSandbox.Logging
         private readonly CancellationTokenSource _cts = new();
         private readonly string _logFilePath;
 
-        public BenchmarkLogger(string category)
+        public BenchmarkLogger(string category, string? rootLogPath = null)
         {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-            var logDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
-
-            Directory.CreateDirectory(logDirectory);
-            _logFilePath = Path.Combine(logDirectory, $"{category}_{timestamp}.log");
+            _logFilePath = Initialize(category, rootLogPath);
 
             _writer = new StreamWriter(new FileStream(_logFilePath, FileMode.Create, FileAccess.Write, FileShare.Read))
             {
                 AutoFlush = true
             };
 
+            Console.WriteLine($"[BenchmarkLogger] Logging to {_logFilePath}");
             _writerTask = Task.Run(ProcessQueueAsync);
+        }
+
+        private string Initialize(string category, string? rootLogPath)
+        {
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                throw new ArgumentException("Category cannot be empty or whitespace.", nameof(category));
+            }
+
+            string baseLogDirectory;
+
+            if (!string.IsNullOrEmpty(rootLogPath))
+            {
+                baseLogDirectory = Path.Combine(rootLogPath, "benchmark-logs");
+            }
+            else
+            {
+                baseLogDirectory = Path.Combine(Environment.ExpandEnvironmentVariables("GITHUB_WORKSPACE") ?? AppContext.BaseDirectory, "Logs", "benchmark-logs");
+            }
+
+            Directory.CreateDirectory(baseLogDirectory);
+
+            var logFileName = $"{category}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.log";
+            return Path.Combine(baseLogDirectory, logFileName);
         }
 
         public void Log(string category, int taskId, string message)
