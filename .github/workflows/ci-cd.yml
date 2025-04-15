@@ -170,7 +170,7 @@ jobs:
           header: "Benchmark Results (Quick PR Run)"
 
   dockerize:
-    needs: [build, test, benchmark]
+    needs: [build, test, benchmark-pr]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
