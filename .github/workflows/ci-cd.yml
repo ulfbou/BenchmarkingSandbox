@@ -104,7 +104,7 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/logs/benchmark-logs
 
       - name: Run Quick Benchmarks (${{ matrix.benchmark }})
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 10
         env:
