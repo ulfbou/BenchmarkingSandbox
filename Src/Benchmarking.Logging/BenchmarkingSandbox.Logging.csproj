@@ -1,9 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
+    <PropertyGroup>
+        <Title>Benchmarking Sandbox Logging</Title>
+        <Description>A simple logging library for the Benchmarking Sandbox project.</Description>
+        <PackageTags>benchmarking;logging</PackageTags>
+    </PropertyGroup>
 </Project>
