@@ -17,14 +17,27 @@ namespace BenchmarkingSandbox.Runner
     [BenchmarkCategory("AsyncLock")]
     public class AsyncLockBenchmark
     {
+        private static IEnumerable<int> GetConcurrentTasksForCI() => new[] { 1, 3 };
+        private static IEnumerable<int> GetConcurrentTasksForNightly() => new[] { 1, 5, 10, 50 };
+
         private AsyncLock _asyncLock = null!;
         private AsyncLockMonitor _monitor = null!;
         private BenchmarkLogger _logger = null!;
         private int _resource = 0;
         private const int MaxTaskCount = 10;
 
-        [Params(1, 5, 10)]
+        [ParamsSource(nameof(ConcurrentTasksSource))]
         public int ConcurrentTasks { get; set; }
+
+        public IEnumerable<int> ConcurrentTasksSource()
+        {
+            string environment = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE") ?? "CI";
+            return environment.ToUpperInvariant() switch
+            {
+                "NIGHTLY" => GetConcurrentTasksForNightly(),
+                _ => GetConcurrentTasksForCI(),
+            };
+        }
 
         [Params(0, 1, 10)]
         public int TimeoutMs { get; set; }
