@@ -1,0 +1,130 @@
+name: Nightly Benchmarks
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  build:
+    name: Build BenchmarkingSandbox
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.get_sha.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+
+      - name: Get short SHA
+        id: get_sha
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set Git protocol to HTTPS
+        run: git config --global url."https://github.com//".insteadOf "git@github.com:"
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore BenchmarkingSandbox.sln
+        working-directory: ${{ github.workspace }}
+
+      - name: Build
+        run: dotnet build --configuration Release BenchmarkingSandbox.sln
+
+  nightly-benchmark:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        benchmark:
+          - AsyncLockBenchmark
+          - AsyncPriorityQueueBenchmarks
+        paramSet: [Small, Medium, Large, ExtraLarge]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive --depth=0
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Benchmark Project (Nightly)
+        run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+
+      - name: Create Logs Directory (Nightly)
+        run: mkdir -p ${{ github.workspace }}/logs/nightly-benchmark-logs/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+
+      - name: Run Nightly Benchmarks (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" -- --paramSet ${{ matrix.paramSet }} --IterationCount 10 --WarmupCount 3 # Example: More rigorous settings
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        timeout-minutes: 60
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/nightly-benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+          LOGS_ROOT_PATH: ${{ github.workspace }}/logs/nightly-benchmark-logs/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+          BENCHMARK_PROFILE: NIGHTLY
+
+      - name: Upload Nightly Benchmark Results (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-benchmark-results-${{ matrix.benchmark }}-${{ matrix.paramSet }}
+          path: ${{ github.workspace }}/logs/nightly-benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}
+
+      - name: Export Nightly Markdown Summary (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
+        run: |
+          LATEST_MD=$(ls -t ${{ github.workspace }}/logs/nightly-benchmark-results/${{ matrix.benchmark }}-${{ matrix.paramSet }}/*.md | head -n 1)
+          if [ -n "$LATEST_MD" ]; then
+            cp "$LATEST_MD" ${{ github.workspace }}/logs/nightly-summaries/summary-md-nightly-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          else
+            echo "No Markdown summary found for ${{ matrix.benchmark }} - ${{ matrix.paramSet }} (Nightly)."
+            touch ${{ github.workspace }}/logs/nightly-summaries/summary-md-nightly-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+          fi
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Upload Nightly Markdown Summary (${{ matrix.benchmark }} - ${{ matrix.paramSet }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-md-nightly-${{ matrix.benchmark }}-${{ matrix.paramSet }}
+          path: ${{ github.workspace }}/logs/nightly-summaries/summary-md-nightly-${{ matrix.benchmark }}-${{ matrix.paramSet }}.md
+
+  nightly-summarize-benchmarks:
+    needs: nightly-benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: summary-md-nightly-*
+          path: ${{ github.workspace }}/logs/nightly-summaries
+
+      - name: Merge Nightly Summaries
+        run: |
+          mkdir -p ${{ github.workspace }}/logs/nightly-full-summary
+          find ${{ github.workspace }}/logs/nightly-summaries -name "*.md" -print0 | while IFS= read -r -d $'\0' file; do
+            echo "--- $file ---" >> ${{ github.workspace }}/logs/nightly-full-summary/nightly-full-summary.md
+            cat "$file" >> ${{ github.workspace }}/logs/nightly-full-summary/nightly-full-summary.md
+            echo "" >> ${{ github.workspace }}/logs/nightly-full-summary/nightly-full-summary.md
+          done
+          if [ -s "${{ github.workspace }}/logs/nightly-full-summary/nightly-full-summary.md" ]; then
+            echo "Full nightly summary generated."
+          else
+            echo "No nightly benchmark summary files found."
+            touch ${{ github.workspace }}/logs/nightly-full-summary/nightly-full-summary.md
+          fi
+
+      - name: Upload Nightly Full Summary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-full-benchmark-summary
+          path: ${{ github.workspace }}/logs/nightly-full-summary/full-summary.md
