@@ -6,19 +6,23 @@ using Async.Locks.Events;
 using Async.Locks.Monitoring;
 
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Diagnosers;
 
 using BenchmarkingSandbox.Logging;
 
 using System.Runtime.CompilerServices;
 
-namespace BenchmarkingSandbox.Runner
+namespace Benchmarking.Runner
 {
     [MemoryDiagnoser]
-    [BenchmarkCategory("AsyncLock")]
+    [BenchmarkCategory("AsyncLock", "QuickCI")]
     public class AsyncLockBenchmark
     {
         private static IEnumerable<int> GetConcurrentTasksForCI() => new[] { 1, 3 };
         private static IEnumerable<int> GetConcurrentTasksForNightly() => new[] { 1, 5, 10, 50 };
+
+        private static IEnumerable<int> GetTimeoutMsForCI() => new[] { 0 };
+        private static IEnumerable<int> GetCancellationDelayForCI() => new[] { 0 };
 
         private AsyncLock _asyncLock = null!;
         private AsyncLockMonitor _monitor = null!;
@@ -39,11 +43,15 @@ namespace BenchmarkingSandbox.Runner
             };
         }
 
-        [Params(0, 1, 10)]
+        [ParamsSource(nameof(TimeoutMsSource))]
         public int TimeoutMs { get; set; }
 
-        [Params(0, 1, 10)]
+        public IEnumerable<int> TimeoutMsSource() => Environment.GetEnvironmentVariable("BENCHMARK_PROFILE")?.ToUpperInvariant() == "NIGHTLY" ? new[] { 0, 1, 10 } : GetTimeoutMsForCI();
+
+        [ParamsSource(nameof(CancellationDelaySource))]
         public int CancellationDelay { get; set; }
+
+        public IEnumerable<int> CancellationDelaySource() => Environment.GetEnvironmentVariable("BENCHMARK_PROFILE")?.ToUpperInvariant() == "NIGHTLY" ? new[] { 0, 1, 10 } : GetCancellationDelayForCI();
 
         [GlobalSetup]
         public void Setup()
@@ -61,7 +69,7 @@ namespace BenchmarkingSandbox.Runner
             _logger?.Dispose();
         }
 
-        [BenchmarkCategory("AcquireRelease")]
+        [BenchmarkCategory("AcquireRelease", "QuickCI")]
         [Benchmark(Baseline = true)]
         public async Task AcquireRelease_Uncontended()
         {
@@ -71,7 +79,7 @@ namespace BenchmarkingSandbox.Runner
             }
         }
 
-        [BenchmarkCategory("AcquireRelease")]
+        [BenchmarkCategory("AcquireRelease", "QuickCI")]
         [Benchmark]
         public async Task AcquireRelease_Contended()
         {
