@@ -1,5 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Title>Benchmarking Sandbox Tests</Title>
+        <Description>A simple test project for the Benchmarking Sandbox project.</Description>
+        <PackageTags>benchmarking;tests</PackageTags>
         <IsPackable>false</IsPackable>
         <OutputType>Library</OutputType>
     </PropertyGroup>
@@ -22,10 +25,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
-        <ProjectReference Include="..\Benchmarking.Runner\BenchmarkingSandbox.Runner.csproj" />
-        <ProjectReference Include="..\Benchmarking.Logging\BenchmarkingSandbox.Logging.csproj" />
-        <ProjectReference Include="..\Async.Collections\Src\Async.Collections.csproj" />
-        <ProjectReference Include="..\Async.Locks\Src\Async.Locks.csproj" />
+        <ProjectReference Include="..\..\Src\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
+        <ProjectReference Include="..\..\Src\Benchmarking.Runner\BenchmarkingSandbox.Runner.csproj" />
+        <ProjectReference Include="..\..\Src\Benchmarking.Logging\BenchmarkingSandbox.Logging.csproj" />
+        <ProjectReference Include="..\..\Src\Async.Collections\Src\Async.Collections.csproj" />
+        <ProjectReference Include="..\..\Src\Async.Locks\Src\Async.Locks.csproj" />
     </ItemGroup>
 </Project>
