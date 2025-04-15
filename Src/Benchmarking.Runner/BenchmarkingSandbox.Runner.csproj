@@ -1,13 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Title>Benchmarking Sandbox Runner</Title>
+        <Description>A simple runner for the Benchmarking Sandbox project.</Description>
+        <PackageTags>benchmarking;runner</PackageTags>
         <OutputType>Exe</OutputType>
         <Optimize>true</Optimize>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.4" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.4" />
     </ItemGroup>
 
     <ItemGroup>
@@ -16,5 +17,4 @@
         <ProjectReference Include="..\Benchmarking.Core\BenchmarkingSandbox.Core.csproj" />
         <ProjectReference Include="..\Benchmarking.Logging\BenchmarkingSandbox.Logging.csproj" />
     </ItemGroup>
-
 </Project>
