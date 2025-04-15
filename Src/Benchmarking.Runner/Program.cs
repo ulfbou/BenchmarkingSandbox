@@ -47,8 +47,8 @@ namespace Benchmarking.Runner
             {
                 Task.WaitAll(new[]
                 {
-                    Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token),
-                    Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token)
+                    Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token)
+                    //Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token)
                 }, token);
             }
             catch (OperationCanceledException)
