@@ -1,0 +1,205 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build BenchmarkingSandbox
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.get_sha.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+
+      - name: Get short SHA
+        id: get_sha
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set Git protocol to HTTPS
+        run: git config --global url."https://github.com//".insteadOf "git@github.com:"
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore BenchmarkingSandbox.sln
+        working-directory: ${{ github.workspace }}
+
+      - name: Build
+        run: dotnet build --configuration Release BenchmarkingSandbox.sln
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ${{ github.workspace }}/Src/*/bin/Release/net9.0/
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive --depth=0
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Run unit tests
+        run: dotnet test ${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj --configuration Release
+        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/Tests/*/TestResults/*.trx
+        if: always()
+
+  benchmark-pr:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
+    strategy:
+      matrix:
+        benchmark:
+          - AsyncLockBenchmark
+          - AsyncPriorityQueueBenchmarks
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive --depth=0
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Benchmark Project
+        run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+
+      - name: Create Logs Directory
+        run: mkdir -p ${{ github.workspace }}/logs/benchmark-logs
+
+      - name: Run Quick Benchmarks (${{ matrix.benchmark }})
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        timeout-minutes: 5
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+          LOGS_ROOT_PATH: ${{ github.workspace }}
+          BENCHMARK_PROFILE: CI
+
+      - name: Upload PR Benchmark Results (${{ matrix.benchmark }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-benchmark-results-${{ matrix.benchmark }}
+          path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+
+      - name: Export PR Markdown Summary (${{ matrix.benchmark }})
+        run: |
+          LATEST_MD=$(ls -t ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr/*.md | head -n 1)
+          if [ -n "$LATEST_MD" ]; then
+            cp "$LATEST_MD" ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+          else
+            echo "No Markdown summary found for ${{ matrix.benchmark }} (PR)."
+            touch ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+          fi
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Upload PR Markdown Summary (${{ matrix.benchmark }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-md-pr-${{ matrix.benchmark }}
+          path: ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+        if: github.event_name == 'pull_request'
+
+  summarize-benchmarks-pr:
+    needs: benchmark-pr
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: summary-md-pr-*
+          path: ${{ github.workspace }}/logs/summaries
+
+      - name: Merge PR Summaries
+        run: |
+          mkdir -p ${{ github.workspace }}/logs/pr-full-summary
+          find ${{ github.workspace }}/logs/summaries -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
+            echo "--- $file ---" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+            cat "$file" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+            echo "" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+          done
+          if [ -s "${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md" ]; then
+            echo "Full PR summary generated."
+          else
+            echo "No PR benchmark summary files found."
+            touch ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+          fi
+
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+          header: "Benchmark Results (Quick PR Run)"
+
+  dockerize:
+    needs: [build, test, benchmark]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ github.repository }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+
+    - name: Checkout submodules
+      run: git submodule update --init --recursive --depth=0
+
+    - name: Set Git protocol to HTTPS
+      run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Build and push Docker image
+      env:
+        DOCKER_REGISTRY: ghcr.io
+        DOCKER_USERNAME: ${{ github.actor }}
+        DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        IMAGE_NAME: benchmarking-sandbox
+      run: |
+        docker login $DOCKER_REGISTRY -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} -f docker/Dockerfile .
+        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }}
+        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
+        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
