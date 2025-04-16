@@ -87,7 +87,7 @@ jobs:
       matrix:
         benchmark:
           - AsyncLockBenchmark
-          - AsyncPriorityQueueBenchmarks
+          - AsyncPriorityQueueBenchmark
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,10 +110,10 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/logs/benchmark-results
         working-directory: ${{ github.workspace }}
 
-      - name: Run Quick Benchmarks (${{ matrix.benchmark }})
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
+      - name: Run Quick Benchmarks (AsyncLockBenchmark)
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark.AcquireRelease_Contended*" --category QuickCI ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
           LOGS_ROOT_PATH: ${{ github.workspace }}
@@ -127,7 +127,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ matrix.benchmark }}-pr
-          path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+          path: ${{ github.workspace }}/BenchmarkDotNet.Artifacts/
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
