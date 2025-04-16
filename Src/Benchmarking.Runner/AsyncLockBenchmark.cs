@@ -16,7 +16,7 @@ namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
     [BenchmarkCategory("AsyncLock", "QuickCI")]
-    public class AsyncLockBenchmark
+    public class AsyncLockBenchmarks
     {
         private static IEnumerable<int> GetConcurrentTasksForCI() => new[] { 1, 3 };
         private static IEnumerable<int> GetConcurrentTasksForNightly() => new[] { 1, 5, 10, 50 };
@@ -59,7 +59,7 @@ namespace BenchmarkingSandbox.Runner
             _asyncLock = new AsyncLock(shouldMonitor: true);
             _monitor = new AsyncLockMonitor();
             _monitor.Enable();
-            _logger = new BenchmarkLogger(nameof(AsyncLockBenchmark));
+            _logger = new BenchmarkLogger(nameof(AsyncLockBenchmarks));
         }
 
         [GlobalCleanup]
