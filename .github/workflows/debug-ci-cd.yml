@@ -11,6 +11,7 @@ env:
   RESULTS_DIR: "${{ github.workspace }}/TestResults"
   BENCHMARK_RESULTS_DIR: "${{ github.workspace }}/BenchmarkResults"
   PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
+  PROJECT_DIR: "${{ github.workspace }}/Src"
 
 jobs:
   build:
@@ -67,10 +68,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Validate Submodule Integrity
         run: |
-          if [ ! -d "${{ github.workspace }}/Async.Locks" ]; then
+          if [ ! -d "${{ env.PROJECT_DIR }}/Async.Locks" ]; then
             echo "Submodule Async.Locks is missing! Exiting..."
             exit 1
           fi
