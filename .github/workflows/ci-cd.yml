@@ -1,193 +1,250 @@
-name: CI/CD
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  DOTNET_VERSION: '9.0.x'
-  BENCHMARK_ARTIFACTS_ROOT: ${{ github.workspace }}/benchmark-artifacts
-  BENCHMARK_LOGS_ROOT: ${{ github.workspace }}/benchmark-logs
-  BENCHMARK_SUMMARIES_ROOT: ${{ github.workspace }}/benchmark-summaries
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-      - name: Restore dependencies
-        run: dotnet restore
-      - name: Build
-        run: dotnet build --configuration Release
-
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore dependencies (Tests)
-        run: dotnet restore
-        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
-
-      - name: Build Tests
-        run: dotnet build --configuration Release --no-restore
-        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
-
-      - name: Run Tests
-        run: dotnet test ${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj --configuration Release --logger:"trx;LogFileName=test-results.trx" --results-directory:TestResults
-        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: ${{ github.workspace }}/Tests/Benchmarking.Tests/TestResults/*.trx
-        if: always()
-
-  benchmark-pr:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Debug - Environment Variables
-        run: |
-          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
-          echo "RUNNER_OS: ${{ runner.os }}"
-          echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
-
-      - name: Create Artifacts Directory
-        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
-        working-directory: ${{ github.workspace }}
-
-      - name: Debug - Print Working Directory (Before Run)
-        run: pwd
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-
-      - name: Debug - Check dotnet Version
-        run: dotnet --version > dotnet_version.log
-
-      - name: Explicit Build (Before Run)
-        run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-
-      - name: Run Single Benchmark (Unfiltered)
-        id: benchmark_run
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release > benchmark_output.log
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-        timeout-minutes: 5
-        env:
-          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr 
-          LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
-          BENCHMARK_PROFILE: CI
-          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }} 
-        continue-on-error: true
-
-      - name: Make Log Script Executable
-        run: chmod +x ./scripts/ubuntu/capture_essential_benchmark_logs.sh
-        working-directory: ${{ github.workspace }}
-
-      - name: Capture Essential Benchmark Logs (Single)
-        if: always()
-        run: |
-          if [ -f "benchmark_output.log" ]; then
-            cat benchmark_output.log | ./scripts/ubuntu/capture_essential_benchmark_logs.sh -
-          else
-            echo "Warning: benchmark_output.log not found."
-          fi
-        working-directory: ${{ github.workspace }}
-
-      - name: Debug - List Benchmark Artifacts (After Run)
-        if: always()
-        run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
-
-      - name: Upload dotnet Version Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dotnet-version-log
-          path: dotnet_version.log
-
-      - name: Upload Benchmark Output Log (Single)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: simplified-benchmark-output
-          path: benchmark_output.log
-
-  summarize-benchmarks-pr:
-    needs: benchmark-pr
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: summary-md-pr-*
-          path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}
-
-      - name: Merge PR Summaries
-        run: |
-          mkdir -p ${{ github.workspace }}/logs/pr-full-summary
-          find ${{ env.BENCHMARK_SUMMARIES_ROOT }} -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
-            echo "--- $file ---" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
-            cat "$file" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
-            echo "" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
-          done
-          if [ -s "${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md" ]; then
-            echo "Full PR summary generated."
-          else
-            echo "No PR benchmark summary files found."
-            touch ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
-          fi
-
-      - name: Comment on PR
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          path: ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
-          header: "Benchmark Results (Quick PR Run)"
-
-  dockerize:
-    needs: [build, test, benchmark-pr]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Build and push Docker image
-      env:
-        DOCKER_REGISTRY: ghcr.io
-        DOCKER_USERNAME: ${{ github.actor }}
-        DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        IMAGE_NAME: benchmarking-sandbox
-      run: |
-        docker login $DOCKER_REGISTRY -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} -f docker/Dockerfile .
-        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }}
-        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
-        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
+#name: CI/CD
+#
+#on:
+#  push:
+#    branches: [ main ]
+#  pull_request:
+#    branches: [ main ]
+#
+#env:
+#  DOTNET_VERSION: '9.0.x'
+#  BENCHMARK_ARTIFACTS_ROOT: ${{ github.workspace }}/benchmark-artifacts
+#  BENCHMARK_LOGS_ROOT: ${{ github.workspace }}/benchmark-logs
+#  BENCHMARK_SUMMARIES_ROOT: ${{ github.workspace }}/benchmark-summaries
+#
+#jobs:
+#  build:
+#    name: Build BenchmarkingSandbox
+#    runs-on: ubuntu-latest
+#    outputs:
+#      sha: ${{ steps.get_sha.outputs.short_sha }}
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#          fetch-depth: 0
+#
+#      - name: Get short SHA
+#        id: get_sha
+#        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+#
+#      - name: Set Git protocol to HTTPS
+#        run: git config --global url."https://github.com//".insteadOf "git@github.com:"
+#
+#      - name: Setup .NET
+#        uses: actions/setup-dotnet@v4
+#        with:
+#          dotnet-version: ${{ env.DOTNET_VERSION }}
+#
+#      # Debugging Steps
+#      - name: Debug - Verify Installed .NET Version
+#        run: dotnet --version
+#
+#      - name: Debug - Environment Variables
+#        run: |
+#          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+#          echo "RUNNER_OS: ${{ runner.os }}"
+#          echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
+#
+#      - name: Create Logs Directory
+#        run: mkdir -p ${{ env.BENCHMARK_LOGS_ROOT }}
+#        working-directory: ${{ github.workspace }}
+#
+#      - name: Debug - Print Working Directory (Before Run)
+#        run: pwd
+#        working-directory: ${{ github.workspace }}
+#
+#      - name: Create Artifacts Directory
+#        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+#        working-directory: ${{ github.workspace }}
+#
+#      - name: Debug - Verify Directory Creation
+#        run: |
+#          ls -l ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+#          ls -l ${{ env.BENCHMARK_LOGS_ROOT }}
+#          ls -l ${{ env.BENCHMARK_SUMMARIES_ROOT }}
+#
+#      - name: Debug - Confirm Git Submodule Initialization
+#        run: git submodule update --init --recursive
+#
+#      - name: Debug - Log System Information
+#        run: |
+#          uname -a
+#          df -h
+#          free -h
+#
+#      - name: Restore dependencies
+#        run: dotnet restore BenchmarkingSandbox.sln
+#        working-directory: ${{ github.workspace }}
+#
+#      - name: Build
+#        run: dotnet build --configuration Release BenchmarkingSandbox.sln
+#        working-directory: ${{ github.workspace }}
+#
+#      - name: Upload Build Artifacts
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: build-output
+#          path: ${{ github.workspace }}/Src/**/bin/Release/net9.0/
+#
+#  test:
+#    needs: build
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#
+#      - name: Setup .NET
+#        uses: actions/setup-dotnet@v4
+#        with:
+#          dotnet-version: ${{ env.DOTNET_VERSION }}
+#
+#      - name: Restore dependencies (Tests)
+#        run: dotnet restore
+#        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+#
+#      - name: Debug - Verify Restored Dependencies
+#        run: dotnet list package
+#        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+#
+#      - name: Debug - List Discovered Tests
+#        run: dotnet test --list-tests
+#        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+#
+#      - name: Build Tests
+#        run: dotnet build --configuration Release --no-restore
+#        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+#
+#      - name: Debug - Capture System Information Before Tests
+#        run: |
+#          uname -a
+#          df -h
+#
+#      - name: Run Tests with Detailed Logging
+#        run: dotnet test --configuration Release --verbosity detailed --logger:"trx;LogFileName=test-results.trx" --results-directory:TestResults
+#        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+#
+#      - name: Upload Test Results
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: test-results
+#          path: ${{ github.workspace }}/Tests/Benchmarking.Tests/TestResults/*.trx
+#        if: always()
+#
+#  benchmark-pr:
+#    needs: build
+#    runs-on: ubuntu-latest
+#    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
+#    strategy:
+#      matrix:
+#        benchmark:
+#          - AsyncLockBenchmark
+#          - AsyncPriorityQueueBenchmark
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#
+#      - name: Setup .NET
+#        uses: actions/setup-dotnet@v4
+#        with:
+#          dotnet-version: ${{ env.DOTNET_VERSION }}
+#
+#      - name: Restore dependencies (Benchmark Runner)
+#        run: dotnet restore
+#        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+#
+#      - name: Debug - Verify .NET Runtime and Configuration
+#        run: dotnet --info
+#
+#      - name: Debug - Log Benchmark Configuration
+#        run: cat ${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj
+#
+#      - name: Build Benchmark Project
+#        run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
+#        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+#
+#      - name: Run Benchmarks (${{ matrix.benchmark }})
+#        id: benchmark_run
+#        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput
+#        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+#        timeout-minutes: 5
+#        env:
+#          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
+#          LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
+#          BENCHMARK_PROFILE: CI
+#          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
+#        continue-on-error: true
+#
+#      - name: Debug - Capture Benchmark Process Details
+#        run: top -b -n 1
+#
+#      - name: Debug - List Benchmark Artifacts
+#        if: always()
+#        run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+#
+#      - name: Upload Benchmark Output Log
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: benchmark-output-${{ matrix.benchmark }}-pr
+#          path: benchmark_output.log
+#
+#  summarize-benchmarks-pr:
+#    needs: benchmark-pr
+#    runs-on: ubuntu-latest
+#    if: github.event_name == 'pull_request'
+#    steps:
+#      - uses: actions/download-artifact@v4
+#        with:
+#          pattern: summary-md-pr-*
+#          path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}
+#
+#      - name: Merge PR Summaries
+#        run: |
+#          mkdir -p ${{ github.workspace }}/logs/pr-full-summary
+#          find ${{ env.BENCHMARK_SUMMARIES_ROOT }} -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
+#            echo "--- $file ---" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+#            cat "$file" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+#            echo "" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+#          done
+#          if [ -s "${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md" ]; then
+#            echo "Full PR summary generated."
+#          else
+#            echo "No PR benchmark summary files found."
+#            touch ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+#          fi
+#
+#      - name: Comment on PR
+#        uses: marocchino/sticky-pull-request-comment@v2
+#        with:
+#          path: ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
+#          header: "Benchmark Results (Quick PR Run)"
+#
+#  dockerize:
+#    needs: [build, test, benchmark-pr]
+#    runs-on: ubuntu-latest
+#    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#    steps:
+#    - uses: actions/checkout@v4
+#      with:
+#        submodules: true
+#
+#    - name: Setup .NET
+#      uses: actions/setup-dotnet@v4
+#      with:
+#        dotnet-version: ${{ env.DOTNET_VERSION }}
+#
+#    - name: Build and push Docker image
+#      env:
+#        DOCKER_REGISTRY: ghcr.io
+#        DOCKER_USERNAME: ${{ github.actor }}
+#        DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+#        IMAGE_NAME: benchmarking-sandbox
+#      run: |
+#        docker login $DOCKER_REGISTRY -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+#        docker build -t $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} -f docker/Dockerfile .
+#        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }}
+#        docker tag $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:${{ needs.build.outputs.sha }} $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
+#        docker push $DOCKER_REGISTRY/$DOCKER_USERNAME/$IMAGE_NAME:latest
