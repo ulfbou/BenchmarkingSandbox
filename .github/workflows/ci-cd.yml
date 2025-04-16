@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Benchmarks (${{ matrix.benchmark }})
         id: benchmark_run
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput # Adjust arguments as needed
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput > benchmark_output.log # Redirect output
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 15
         env:
@@ -127,18 +127,19 @@ jobs:
 
       - name: Capture Essential Benchmark Logs (${{ matrix.benchmark }})
         if: always()
-        run: |
-          LOG_FILE="${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/${{ matrix.benchmark }}*.log"
-          if [ -f "$LOG_FILE" ]; then
-            ./scripts/ubuntu/capture_essential_benchmark_logs.sh "$LOG_FILE"
-          else
-            echo "Error: Log file not found: $LOG_FILE"
-          fi
+        run: cat benchmark_output.log | ./scripts/ubuntu/capture_essential_benchmark_logs.sh - # Read from stdin
         working-directory: ${{ github.workspace }}
 
       - name: Debug - List Benchmark Artifacts
         if: always()
         run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+
+      - name: Upload Benchmark Output Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-output-${{ matrix.benchmark }}-pr
+          path: benchmark_output.log
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         if: always()
