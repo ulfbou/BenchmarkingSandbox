@@ -14,7 +14,7 @@ using BenchmarkingSandbox.Runner;
 
 using Perfolizer.Horology;
 
-namespace Benchmarking.Runner
+namespace BenchmarkingSandbox.Runner
 {
     public class Program
     {

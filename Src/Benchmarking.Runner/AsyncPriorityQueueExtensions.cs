@@ -3,7 +3,7 @@
 
 using Async.Collections;
 
-namespace Benchmarking.Runners
+namespace BenchmarkingSandbox.Runner
 {
     public static class AsyncPriorityQueueExtensions
     {

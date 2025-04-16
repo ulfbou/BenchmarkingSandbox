@@ -5,7 +5,7 @@ using Async.Collections;
 
 using BenchmarkDotNet.Attributes;
 
-using Benchmarking.Runners;
+using BenchmarkingSandbox.Runner;
 
 using BenchmarkingSandbox.Logging;
 

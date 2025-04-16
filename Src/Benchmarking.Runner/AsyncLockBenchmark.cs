@@ -12,7 +12,7 @@ using BenchmarkingSandbox.Logging;
 
 using System.Runtime.CompilerServices;
 
-namespace Benchmarking.Runner
+namespace BenchmarkingSandbox.Runner
 {
     [MemoryDiagnoser]
     [BenchmarkCategory("AsyncLock", "QuickCI")]
