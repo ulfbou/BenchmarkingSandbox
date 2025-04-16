@@ -236,6 +236,6 @@ namespace BenchmarkingSandbox.Runner
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Task SimulateWorkAsync(int delayMs = 1) => Task.Delay(delayMs);
+        private static Task SimulateWorkAsync(int delayMs = 1) => Task.Delay(Math.Min(1, delayMs / 2));
     }
 }

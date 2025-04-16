@@ -20,12 +20,68 @@ jobs:
       - name: Checkout Repository with Submodules
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+#      # Debugging Steps
+      - name: Debug - Verify Installed .NET Version
+        run: dotnet --version
+
+      - name: Debug - Environment Variables
+        run: |
+          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+          echo "RUNNER_OS: ${{ runner.os }}"
+          echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
+
+      - name: Create Logs Directory
+        run: mkdir -p ${{ env.BENCHMARK_LOGS_ROOT }}
+        working-directory: ${{ github.workspace }}
+
+      - name: Debug - Print Working Directory (Before Run)
+        run: pwd
+        working-directory: ${{ github.workspace }}
+
+      - name: Create Artifacts Directory
+        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+        working-directory: ${{ github.workspace }}
+
+      - name: Debug - Verify Directory Creation
+        run: |
+          ls -l ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+          ls -l ${{ env.BENCHMARK_LOGS_ROOT }}
+          ls -l ${{ env.BENCHMARK_SUMMARIES_ROOT }}
+
+      - name: Debug - Confirm Git Submodule Initialization
+        run: git submodule update --init --recursive
+        working-directory: ${{ github.workspace }}
+        env:
+          GIT_SUBMODULE_STRATEGY: recursive
+
+      - name: Debug - Verify Git Submodule Initialization
+        run: |
+          git submodule status
+          git submodule foreach 'echo $name $sha1 $sm_path'
+          git submodule foreach 'git rev-parse --short HEAD'
+          git submodule foreach 'git status'
+  
+      - name: Debug - Log System Information
+        run: |
+          uname -a
+          df -h
+          free -h
+          ls -l ${{ github.workspace }}
+          ls -l ${{ github.workspace }}/Src
+          ls -l ${{ github.workspace }}/Src/Benchmarking.Runner
+          ls -l ${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj
+
+      - name: Restore dependencies
+        run: dotnet restore BenchmarkingSandbox.sln
+        working-directory: ${{ github.workspace }}
 
       - name: Compile BenchmarkingSandbox
         run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
@@ -93,6 +149,9 @@ jobs:
 
       - name: Run Benchmarks
         run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --filter *Benchmark*
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        timeout-minutes: 3
+
 
       - name: Store and Upload Benchmark Results
         uses: actions/upload-artifact@v4

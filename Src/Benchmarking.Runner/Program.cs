@@ -27,11 +27,11 @@ namespace BenchmarkingSandbox.Runner
             var token = cts.Token;
 
             var shortJob = Job.Dry
-                .WithIterationCount(3)
+                .WithIterationCount(2)
                 .WithWarmupCount(1)
                 .WithInvocationCount(1)
                 .WithUnrollFactor(1)
-                .WithMinIterationTime(TimeInterval.FromMilliseconds(50));
+                .WithMinIterationTime(TimeInterval.FromMilliseconds(20));
 
             var config = ManualConfig.Create(DefaultConfig.Instance)
                 .AddJob(shortJob)
