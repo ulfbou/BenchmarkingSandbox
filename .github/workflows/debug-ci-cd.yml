@@ -15,6 +15,7 @@ env:
   BENCHMARK_SUMMARIES_ROOT: "${{ github.workspace }}/BenchmarkSummaries"
   PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
   PROJECT_DIR: "${{ github.workspace }}/Src"
+  BENCHMARK_PROFILE: "CI"
 
 jobs:
   build:
@@ -140,12 +141,10 @@ jobs:
       - name: Compile Benchmarking Project
         run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
 
-      - name: Run Benchmarks
-        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --filter *Benchmark*
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      - name: Run Benchmarks (QuickCI Only)
+        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --category ${{ env.BENCHMARK_PROFILE }} --filter *Benchmark*
         timeout-minutes: 3
-
-
+        
       - name: Store and Upload Benchmark Results
         uses: actions/upload-artifact@v4
         with:
