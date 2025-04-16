@@ -9,7 +9,10 @@ on:
 env:
   DOTNET_VERSION: "9.0.x"
   RESULTS_DIR: "${{ github.workspace }}/TestResults"
+  BENCHMARK_ARTIFACTS_ROOT: "${{ github.workspace }}/BenchmarkArtifacts"
+  BENCHMARK_LOGS_ROOT: "${{ github.workspace }}/BenchmarkLogs"
   BENCHMARK_RESULTS_DIR: "${{ github.workspace }}/BenchmarkResults"
+  BENCHMARK_SUMMARIES_ROOT: "${{ github.workspace }}/BenchmarkSummaries"
   PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
   PROJECT_DIR: "${{ github.workspace }}/Src"
 
@@ -34,10 +37,27 @@ jobs:
       - name: Debug - Environment Variables
         run: |
           echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+          echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
+          echo "BENCHMARK_LOGS_ROOT: ${{ env.BENCHMARK_LOGS_ROOT }}"
+          echo "BENCHMARK_SUMMARIES_ROOT: ${{ env.BENCHMARK_SUMMARIES_ROOT }}"
+          echo "BENCHMARK_RESULTS_DIR: ${{ env.BENCHMARK_RESULTS_DIR }}"
+          echo "PROJECT_DIR: ${{ env.PROJECT_DIR }}"
+          echo "RESULTS_DIR: ${{ env.RESULTS_DIR }}"
+          echo "PR_SUMMARY_PATH: ${{ env.PR_SUMMARY_PATH }}"
           echo "RUNNER_OS: ${{ runner.os }}"
+          echo "RUNNER_WORKSPACE: ${{ runner.workspace }}"
+          echo "RUNNER_TEMP: ${{ runner.temp }}"
           env | grep BENCHMARK
 
       - name: Ensure Benchmark Directories Exist
+        run: |
+          if [ -n "${{ env.BENCHMARK_ARTIFACTS_ROOT }}" ]; then
+            mkdir -p "${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
+          else
+            echo "BENCHMARK_ARTIFACTS_ROOT is empty! Skipping mkdir."
+          fi
+
+      - name: Ensure Benchmark Directories Exist - old version
         run: |
           [ -n "${{ env.BENCHMARK_ARTIFACTS_ROOT }}" ] && mkdir -p "${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
           [ -n "${{ env.BENCHMARK_LOGS_ROOT }}" ] && mkdir -p "${{ env.BENCHMARK_LOGS_ROOT }}"
