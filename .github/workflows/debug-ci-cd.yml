@@ -1,0 +1,110 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  RESULTS_DIR: "${{ github.workspace }}/TestResults"
+  BENCHMARK_RESULTS_DIR: "${{ github.workspace }}/BenchmarkResults"
+  PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository with Submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Compile BenchmarkingSandbox
+        run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
+
+      - name: Generate SHA Reference
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore Dependencies
+        run: dotnet restore "${{ github.workspace }}/BenchmarkingSandbox.sln"
+
+      - name: Build Test Projects
+        run: dotnet build "${{ github.workspace }}/BenchmarkingSandbox.sln" --configuration Release
+
+      - name: Run xUnit Tests
+        run: dotnet test "${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj" --logger "trx;LogFileName=test-results.trx" --results-directory "${{ env.RESULTS_DIR }}"
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ env.RESULTS_DIR }}
+
+  benchmark:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository with Submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Validate Submodule Integrity
+        run: |
+          if [ ! -d "${{ github.workspace }}/Async.Locks" ]; then
+            echo "Submodule Async.Locks is missing! Exiting..."
+            exit 1
+          fi
+
+      - name: Update Submodules
+        run: git submodule update --init --recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore Dependencies for Benchmarking
+        run: dotnet restore "${{ github.workspace }}/BenchmarkingSandbox.sln"
+
+      - name: Compile Benchmarking Project
+        run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
+
+      - name: Run Benchmarks
+        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --filter *Benchmark*
+
+      - name: Store and Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: ${{ env.BENCHMARK_RESULTS_DIR }}
+
+      - name: Generate Summary for PRs
+        run: |
+          echo "### Benchmark Results for SHA $SHA" >> ${{ env.PR_SUMMARY_PATH }}
+          cat ${{ env.BENCHMARK_RESULTS_DIR }}/* >> ${{ env.PR_SUMMARY_PATH }}
+
+      - name: Upload Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-summary
+          path: ${{ env.PR_SUMMARY_PATH }}
