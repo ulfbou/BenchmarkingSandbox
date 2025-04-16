@@ -111,15 +111,13 @@ jobs:
           BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
           LOGS_ROOT_PATH: ${{ github.workspace }}
           BENCHMARK_PROFILE: CI
-        with:
-          name: benchmark-results-${{ matrix.benchmark }}-pr
-          path: ${{ github.workspace }}/logs/benchmark-results/{{ matrix.benchmark }}-${{ matrix.paramSet }}
-          
+
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-{{ matrix.benchmark }}-pr
-          path: github.workspace/logs/benchmark−results/{{ matrix.benchmark }}-pr
+          name: benchmark-results-${{ matrix.benchmark }}-pr
+          path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
