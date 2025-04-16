@@ -110,8 +110,9 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/logs/benchmark-results
         working-directory: ${{ github.workspace }}
 
-      - name: Run Quick Benchmarks (AsyncLockBenchmark)
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark.AcquireRelease_Contended*" --category QuickCI ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
+      - name: Run Contended AcquireRelease Benchmark
+        if: matrix.benchmark == 'AsyncLockBenchmark'
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark.AcquireRelease_Contended*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 15
         env:
@@ -120,8 +121,19 @@ jobs:
           BENCHMARK_PROFILE: CI
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
 
+      - name: Run Other Benchmarks
+        if: matrix.benchmark != 'AsyncLockBenchmark'
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+        timeout-minutes: 10
+        env:
+          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+          LOGS_ROOT_PATH: ${{ github.workspace }}
+          BENCHMARK_PROFILE: CI
+          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
+
       - name: Debug - List Benchmark Artifacts
-        run: ls -R ${{ github.workspace }}/logs/benchmark-results/
+        run: ls -R ${{ github.workspace }}/BenchmarkDotNet.Artifacts/
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
@@ -131,7 +143,7 @@ jobs:
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
-          LATEST_MD=$(ls -t ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr/*.md | head -n 1)
+          LATEST_MD=$(ls -t ${{ github.workspace }}/BenchmarkDotNet.Artifacts/results/*.md | head -n 1)
           if [ -n "$LATEST_MD" ]; then
             cp "$LATEST_MD" ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
           else
