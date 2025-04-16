@@ -118,8 +118,9 @@ jobs:
           BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
           LOGS_ROOT_PATH: ${{ github.workspace }}
           BENCHMARK_PROFILE: CI
+          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
 
-      - name: Debug - List Benchmark Artifacts (TEMP)
+      - name: Debug - List Benchmark Artifacts
         run: ls -R ${{ github.workspace }}/logs/benchmark-results/
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
