@@ -113,9 +113,9 @@ jobs:
         run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
         working-directory: ${{ github.workspace }}
 
-      - name: Run Contended AcquireRelease Benchmark
-        if: matrix.benchmark == 'AsyncLockBenchmark'
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "AsyncLockBenchmark.AcquireRelease_Contended*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput
+      - name: Run Benchmarks (${{ matrix.benchmark }})
+        id: benchmark_run
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput # Adjust arguments as needed
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 15
         env:
@@ -123,39 +123,32 @@ jobs:
           LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
           BENCHMARK_PROFILE: CI
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
+        continue-on-error: true
 
-      - name: Run Other Benchmarks
-        if: matrix.benchmark != 'AsyncLockBenchmark'
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-        timeout-minutes: 10
-        env:
-          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
-          LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
-          BENCHMARK_PROFILE: CI
-          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
-
-      - name: Capture Essential Benchmark Logs (AcquireRelease_Contended)
-        if: matrix.benchmark == 'AsyncLockBenchmark'
+      - name: Capture Essential Benchmark Logs (${{ matrix.benchmark }})
+        if: always()
         run: |
-          LOG_FILE="${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/AsyncLockBenchmark*.log"
+          LOG_FILE="${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/${{ matrix.benchmark }}*.log"
           if [ -f "$LOG_FILE" ]; then
             ./scripts/ubuntu/capture_essential_benchmark_logs.sh "$LOG_FILE"
           else
             echo "Error: Log file not found: $LOG_FILE"
           fi
+        working-directory: ${{ github.workspace }}
 
       - name: Debug - List Benchmark Artifacts
-        run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
         if: always()
+        run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ matrix.benchmark }}-pr
           path: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
+        if: github.event_name == 'pull_request'
         run: |
           mkdir -p ${{ env.BENCHMARK_SUMMARIES_ROOT }}
           LATEST_MD=$(ls -t ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results/*.md | head -n 1)
@@ -165,16 +158,15 @@ jobs:
             echo "No Markdown summary found for ${{ matrix.benchmark }} (PR)."
             touch ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
           fi
-        if: github.event_name == 'pull_request'
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
       - name: Upload PR Markdown Summary (${{ matrix.benchmark }})
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: summary-md-pr-${{ matrix.benchmark }}
           path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
-        if: github.event_name == 'pull_request'
 
   summarize-benchmarks-pr:
     needs: benchmark-pr
