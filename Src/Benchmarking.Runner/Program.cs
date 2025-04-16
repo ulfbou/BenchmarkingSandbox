@@ -14,11 +14,13 @@ using BenchmarkingSandbox.Runner;
 
 using Perfolizer.Horology;
 
+using System.Diagnostics;
+
 namespace BenchmarkingSandbox.Runner
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var timeoutMinutes = TryParseTimeoutArg(args, defaultMinutes: 15);
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMinutes));
@@ -43,39 +45,30 @@ namespace BenchmarkingSandbox.Runner
 
             Console.WriteLine($"{DateTime.Now}: Starting benchmarks with a timeout of {timeoutMinutes} minute(s).");
 
+            await RunBenchmarksAsync<AsyncLockBenchmarks>(config, token);
+            await RunBenchmarksAsync<AsyncPriorityQueueBenchmarks>(config, token);
+            Console.WriteLine($"{DateTime.Now}: All benchmarks completed.");
+        }
+
+        private static async Task RunBenchmarksAsync<T>(IConfig config, CancellationToken token)
+            where T : class
+        {
+            Console.WriteLine($"{DateTime.Now}: Starting benchmark for {typeof(T).Name}.");
+            var sw = Stopwatch.StartNew();
+
             try
             {
-                var benchmarkToRun = Environment.GetEnvironmentVariable("GITHUB_MATRIX_BENCHMARK");
-
-                if (!string.IsNullOrEmpty(benchmarkToRun))
-                {
-                    Console.WriteLine($"{DateTime.Now}: Running benchmark: {benchmarkToRun}");
-
-                    if (benchmarkToRun == "AsyncPriorityQueueBenchmark")
-                    {
-                        Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token).Wait(token);
-                    }
-                    else if (benchmarkToRun == "AsyncLockBenchmark")
-                    {
-                        Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token).Wait(token);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"{DateTime.Now}: Unknown benchmark specified in GITHUB_MATRIX_BENCHMARK: {benchmarkToRun}");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"{DateTime.Now}: GITHUB_MATRIX_BENCHMARK environment variable not set.");
-                }
+                var benchmarkTask = Task.Run(() => BenchmarkRunner.Run<T>(config), token);
+                await benchmarkTask;
             }
             catch (OperationCanceledException)
             {
-                Console.Error.WriteLine($"Benchmark execution cancelled after timeout of {timeoutMinutes} minute(s).");
+                Console.Error.WriteLine($"Benchmark execution cancelled after timeout.");
             }
             finally
             {
-                Console.WriteLine($"{DateTime.Now}: All benchmarks completed.");
+                sw.Stop();
+                Console.WriteLine($"{DateTime.Now}: Benchmark for {typeof(T).Name} completed in {sw.Elapsed.TotalSeconds} seconds.");
             }
         }
 
