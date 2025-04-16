@@ -83,35 +83,35 @@ jobs:
         if: always()
 
   benchmark-pr:
-    needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
-    strategy:
-      matrix:
-        benchmark:
-          - AsyncLockBenchmark
-          - AsyncPriorityQueueBenchmark
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '9.0.x'
 
-      - name: Restore dependencies (Benchmark Runner)
-        run: dotnet restore
+      - name: Debug - Environment Variables
+        run: |
+          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+          echo "RUNNER_OS: ${{ runner.os }}"
+          echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
+
+      - name: Create Artifacts Directory
+        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+        working-directory: ${{ github.workspace }}
+
+      - name: Debug - Print Working Directory (Before Run)
+        run: pwd
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
-      - name: Build Benchmark Project
-        run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
-        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
+      - name: Debug - Check dotnet Version
+        run: dotnet --version > dotnet_version.log
 
       - name: Run Benchmarks (${{ matrix.benchmark }})
         id: benchmark_run
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput > benchmark_output.log
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release > benchmark_output.log
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 5
         env:
@@ -135,9 +135,16 @@ jobs:
           fi
         working-directory: ${{ github.workspace }}
 
-      - name: Debug - List Benchmark Artifacts
+      - name: Debug - List Benchmark Artifacts (After Run)
         if: always()
         run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+
+      - name: Upload dotnet Version Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-version-log
+          path: dotnet_version.log
 
       - name: Upload Benchmark Output Log
         if: always()
