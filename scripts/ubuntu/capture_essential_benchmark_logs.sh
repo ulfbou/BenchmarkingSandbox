@@ -2,10 +2,10 @@
 # scripts/ubuntu/capture_essential_benchmark_logs.sh
 
 # This script extracts essential log information for a specific benchmark
-# from a BenchmarkDotNet log file.
+# from a BenchmarkDotNet log file or standard input.
 
 # --- Configuration ---
-LOG_FILE="$1"             # Path to the BenchmarkDotNet log file (passed as argument)
+LOG_FILE="$1"
 BENCHMARK_NAME="AsyncLockBenchmark.AcquireRelease_Contended"
 DEBUG_KEYWORD="AsyncLockMonitor-DEBUG"
 ERROR_KEYWORD="AsyncLockMonitor-ERROR"
@@ -14,37 +14,43 @@ END_MARKER_REGEX="^// \\*\\*\\*\\*\\*\\*\\*\\*\\*\\*\\*\\*\\*\\*\\*/"
 
 # --- Script Logic ---
 
-if [ -z "$LOG_FILE" ]; then
-  echo "Error: Log file path not provided as the first argument."
-  exit 1
+if [ -z "$LOG_FILE" ] || [ "$LOG_FILE" = "-" ]; then
+  # Read from standard input
+  INPUT_SOURCE="stdin"
+  LOG_CONTENT=$(cat -)
+else
+  # Read from the specified file
+  INPUT_SOURCE="file: $LOG_FILE"
+  if [ ! -f "$LOG_FILE" ]; then
+    echo "Error: Log file not found: $LOG_FILE"
+    exit 1
+  fi
+  LOG_CONTENT=$(cat "$LOG_FILE")
 fi
 
-if [ ! -f "$LOG_FILE" ]; then
-  echo "Error: Log file not found: $LOG_FILE"
-  exit 1
-fi
+echo "Processing logs from: $INPUT_SOURCE"
 
-start_line=$(grep -nE "$START_MARKER_REGEX" "$LOG_FILE" | head -n 1 | cut -d':' -f1)
+start_line=$(echo "$LOG_CONTENT" | grep -nE "$START_MARKER_REGEX" | head -n 1 | cut -d':' -f1)
 
 if [ -n "$start_line" ]; then
-  end_line=$(awk "NR > $start_line && match(\$0, \"$END_MARKER_REGEX\")" "$LOG_FILE" | head -n 1 | cut -d':' -f1)
+  end_line=$(echo "$LOG_CONTENT" | awk "NR > $start_line && match(\$0, \"$END_MARKER_REGEX\")" | head -n 1 | cut -d':' -f1)
 
-  echo "## Essential Logs for $BENCHMARK_NAME from $LOG_FILE"
+  echo "## Essential Logs for $BENCHMARK_NAME"
   echo "--- Benchmark Block ---"
   if [ -n "$end_line" ]; then
-    sed -n "${start_line},${end_line}p" "$LOG_FILE"
+    echo "$LOG_CONTENT" | sed -n "${start_line},${end_line}p"
   else
     echo "Warning: Could not find the end marker for $BENCHMARK_NAME. Printing from start marker."
-    sed -n "${start_line},$p" "$LOG_FILE"
+    echo "$LOG_CONTENT" | sed -n "${start_line},$p"
   fi
   echo ""
 
   echo "--- Debug and Error Messages ---"
-  grep -E "($DEBUG_KEYWORD|$ERROR_KEYWORD)" "$LOG_FILE"
+  echo "$LOG_CONTENT" | grep -E "($DEBUG_KEYWORD|$ERROR_KEYWORD)"
 else
-  echo "Warning: Could not find the start marker for $BENCHMARK_NAME in $LOG_FILE."
+  echo "Warning: Could not find the start marker for $BENCHMARK_NAME."
   echo "--- Entire Log (Limited to Debug/Error) ---"
-  grep -E "($DEBUG_KEYWORD|$ERROR_KEYWORD)" "$LOG_FILE"
+  echo "$LOG_CONTENT" | grep -E "($DEBUG_KEYWORD|$ERROR_KEYWORD)"
 fi
 
 exit 0
