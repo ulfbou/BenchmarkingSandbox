@@ -8,6 +8,9 @@ on:
 
 env:
   DOTNET_VERSION: '9.0.x'
+  BENCHMARK_ARTIFACTS_ROOT: ${{ github.workspace }}/benchmark-artifacts
+  BENCHMARK_LOGS_ROOT: ${{ github.workspace }}/benchmark-logs
+  BENCHMARK_SUMMARIES_ROOT: ${{ github.workspace }}/benchmark-summaries
 
 jobs:
   build:
@@ -106,8 +109,8 @@ jobs:
         run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
-      - name: Create Logs Directory
-        run: mkdir -p ${{ github.workspace }}/logs/benchmark-results
+      - name: Create Artifacts Directory
+        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
         working-directory: ${{ github.workspace }}
 
       - name: Run Contended AcquireRelease Benchmark
@@ -116,8 +119,8 @@ jobs:
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 15
         env:
-          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
-          LOGS_ROOT_PATH: ${{ github.workspace }}
+          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
+          LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
           BENCHMARK_PROFILE: CI
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
 
@@ -127,28 +130,30 @@ jobs:
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 10
         env:
-          BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
-          LOGS_ROOT_PATH: ${{ github.workspace }}
+          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
+          LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
           BENCHMARK_PROFILE: CI
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
 
       - name: Debug - List Benchmark Artifacts
-        run: ls -R ${{ github.workspace }}/BenchmarkDotNet.Artifacts/
+        run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
+        if: always() # Ensure this runs even if benchmarks fail
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ matrix.benchmark }}-pr
-          path: ${{ github.workspace }}/BenchmarkDotNet.Artifacts/
+          path: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
-          LATEST_MD=$(ls -t ${{ github.workspace }}/BenchmarkDotNet.Artifacts/results/*.md | head -n 1)
+          mkdir -p ${{ env.BENCHMARK_SUMMARIES_ROOT }}
+          LATEST_MD=$(ls -t ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results/*.md | head -n 1)
           if [ -n "$LATEST_MD" ]; then
-            cp "$LATEST_MD" ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+            cp "$LATEST_MD" ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
           else
             echo "No Markdown summary found for ${{ matrix.benchmark }} (PR)."
-            touch ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+            touch ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
           fi
         if: github.event_name == 'pull_request'
         env:
@@ -158,7 +163,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: summary-md-pr-${{ matrix.benchmark }}
-          path: ${{ github.workspace }}/logs/summaries/summary-md-pr-${{ matrix.benchmark }}.md
+          path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
         if: github.event_name == 'pull_request'
 
   summarize-benchmarks-pr:
@@ -169,12 +174,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: summary-md-pr-*
-          path: ${{ github.workspace }}/logs/summaries
+          path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}
 
       - name: Merge PR Summaries
         run: |
-          mkdir -p ${{ github.workspace }}/logs/pr-full-summary
-          find ${{ github.workspace }}/logs/summaries -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
+          mkdir -p ${{ github.workspace }}/logs/pr-full-summary # Keeping this path for the comment
+          find ${{ env.BENCHMARK_SUMMARIES_ROOT }} -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
             echo "--- $file ---" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
             cat "$file" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
             echo "" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
