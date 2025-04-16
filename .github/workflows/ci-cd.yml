@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  DOTNET_VERSION: '9.0.x'
+
 jobs:
   build:
     name: Build BenchmarkingSandbox
@@ -13,10 +16,8 @@ jobs:
     outputs:
       sha: ${{ steps.get_sha.outputs.short_sha }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
           fetch-depth: 0
 
@@ -27,10 +28,10 @@ jobs:
       - name: Set Git protocol to HTTPS
         run: git config --global url."https://github.com//".insteadOf "git@github.com:"
 
-      - name: Setup .NET 9
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
         run: dotnet restore BenchmarkingSandbox.sln
@@ -38,6 +39,7 @@ jobs:
 
       - name: Build
         run: dotnet build --configuration Release BenchmarkingSandbox.sln
+        working-directory: ${{ github.workspace }}
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -49,29 +51,32 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
-      - name: Checkout submodules
-        run: git submodule update --init --recursive --depth=0
-
-      - name: Setup .NET 9
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Run unit tests
-        run: dotnet test ${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj --configuration Release
+      - name: Restore dependencies (Tests)
+        run: dotnet restore
+        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+
+      - name: Build Tests
+        run: dotnet build --configuration Release --no-restore
+        working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
+
+      - name: Run Tests
+        run: dotnet test ${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj --configuration Release --logger:"trx;LogFileName=test-results.trx" --results-directory:TestResults
         working-directory: ${{ github.workspace }}/Tests/Benchmarking.Tests
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ${{ github.workspace }}/Tests/**/TestResults/*.trx
+          path: ${{ github.workspace }}/Tests/Benchmarking.Tests/TestResults/*.trx
         if: always()
 
   benchmark-pr:
@@ -84,24 +89,26 @@ jobs:
           - AsyncLockBenchmark
           - AsyncPriorityQueueBenchmarks
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Checkout submodules
-        run: git submodule update --init --recursive --depth=0
-
-      - name: Setup .NET 9
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies (Benchmark Runner)
+        run: dotnet restore
+        working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
       - name: Build Benchmark Project
         run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
       - name: Create Logs Directory
-        run: mkdir -p ${{ github.workspace }}/logs/benchmark-logs
+        run: mkdir -p ${{ github.workspace }}/logs/benchmark-results
+        working-directory: ${{ github.workspace }}
 
       - name: Run Quick Benchmarks (${{ matrix.benchmark }})
         run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI ${{ matrix.benchmark == 'AsyncLockBenchmark' && '-- --ConcurrentTasks 1 --TimeoutMs 1 --IterationCount 5 --WarmupCount 2' || '' }}
@@ -112,12 +119,14 @@ jobs:
           LOGS_ROOT_PATH: ${{ github.workspace }}
           BENCHMARK_PROFILE: CI
 
+      - name: Debug - List Benchmark Artifacts (TEMP)
+        run: ls -R ${{ github.workspace }}/logs/benchmark-results/
+
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ matrix.benchmark }}-pr
           path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
-
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
@@ -175,22 +184,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
-        repository: ${{ github.repository }}
-        token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
 
-    - name: Checkout submodules
-      run: git submodule update --init --recursive --depth=0
-
-    - name: Set Git protocol to HTTPS
-      run: git config --global url."https://github.com/".insteadOf "git@github.com:"
-
-    - name: Setup .NET 9
+    - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Build and push Docker image
       env:
