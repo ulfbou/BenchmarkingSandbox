@@ -22,7 +22,7 @@ namespace BenchmarkingSandbox.Runner
     {
         public static async Task Main(string[] args)
         {
-            var timeoutMinutes = TryParseTimeoutArg(args, defaultMinutes: 15);
+            var timeoutMinutes = TryParseTimeoutArg(args, defaultMinutes: 2);
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMinutes));
             var token = cts.Token;
 
