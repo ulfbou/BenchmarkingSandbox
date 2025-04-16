@@ -7,15 +7,23 @@ on:
   pull_request:
 
 env:
-  DOTNET_VERSION: "9.0.x"
-  RESULTS_DIR: "${{ github.workspace }}/TestResults"
+  ASYNC_LOCKS_SUBMODULE_PATH: "${{ github.workspace }}/Src/Async.Locks"
   BENCHMARK_ARTIFACTS_ROOT: "${{ github.workspace }}/BenchmarkArtifacts"
+  BENCHMARK_FULL_LOG_PATH: "${{ github.workspace }}/benchmark_full.log"
   BENCHMARK_LOGS_ROOT: "${{ github.workspace }}/BenchmarkLogs"
-  BENCHMARK_RESULTS_DIR: "${{ github.workspace }}/BenchmarkResults"
-  BENCHMARK_SUMMARIES_ROOT: "${{ github.workspace }}/BenchmarkSummaries"
-  PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
-  PROJECT_DIR: "${{ github.workspace }}/Src"
   BENCHMARK_PROFILE: "CI"
+  BENCHMARK_RESULTS_DIR: "${{ github.workspace }}/BenchmarkResults"
+  BENCHMARK_RUNNER_PROJECT_PATH: "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj"
+  BENCHMARK_SOLUTION_PATH: "${{ github.workspace }}/BenchmarkingSandbox.sln"
+  BENCHMARK_SUMMARIES_ROOT: "${{ github.workspace }}/BenchmarkSummaries"
+  DOTNET_VERSION: "9.0.x"
+  GITHUB_WORKSPACE: "${{ github.workspace }}"
+  PROJECT_DIR: "${{ github.workspace }}/Src"
+  PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
+  RESULTS_DIR: "${{ github.workspace }}/TestResults"
+  TEST_PROJECT_PATH: "${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj"
+  TEST_RESULTS_DIRECTORY: "${{ env.RESULTS_DIR }}"
+  TEST_RESULTS_LOG_FILENAME: "test-results.trx"
 
 jobs:
   build:
@@ -37,7 +45,7 @@ jobs:
 
       - name: Debug - Environment Variables
         run: |
-          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+          echo "GITHUB_WORKSPACE: ${{ env.GITHUB_WORKSPACE }}"
           echo "BENCHMARK_ARTIFACTS_ROOT: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
           echo "BENCHMARK_LOGS_ROOT: ${{ env.BENCHMARK_LOGS_ROOT }}"
           echo "BENCHMARK_SUMMARIES_ROOT: ${{ env.BENCHMARK_SUMMARIES_ROOT }}"
@@ -63,11 +71,11 @@ jobs:
           [ -n "${{ env.BENCHMARK_ARTIFACTS_ROOT }}" ] && mkdir -p "${{ env.BENCHMARK_ARTIFACTS_ROOT }}"
           [ -n "${{ env.BENCHMARK_LOGS_ROOT }}" ] && mkdir -p "${{ env.BENCHMARK_LOGS_ROOT }}"
           [ -n "${{ env.BENCHMARK_SUMMARIES_ROOT }}" ] && mkdir -p "${{ env.BENCHMARK_SUMMARIES_ROOT }}"
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.GITHUB_WORKSPACE }}
 
       - name: Debug - Confirm Git Submodule Initialization
         run: git submodule update --init --recursive
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.GITHUB_WORKSPACE }}
 
       - name: Debug - Verify Git Submodule Initialization
         run: |
@@ -75,10 +83,10 @@ jobs:
           git submodule foreach 'echo $name $sha1 $sm_path'
 
       - name: Restore dependencies
-        run: dotnet restore "${{ github.workspace }}/BenchmarkingSandbox.sln"
+        run: dotnet restore "${{ env.BENCHMARK_SOLUTION_PATH }}"
 
       - name: Compile BenchmarkingSandbox Runner
-        run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
+        run: dotnet build "${{ env.BENCHMARK_RUNNER_PROJECT_PATH }}" --configuration Release
 
       - name: Generate SHA Reference
         run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
@@ -96,19 +104,19 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore Dependencies
-        run: dotnet restore "${{ github.workspace }}/BenchmarkingSandbox.sln"
+        run: dotnet restore "${{ env.BENCHMARK_SOLUTION_PATH }}"
 
       - name: Build Test Projects
-        run: dotnet build "${{ github.workspace }}/BenchmarkingSandbox.sln" --configuration Release
+        run: dotnet build "${{ env.BENCHMARK_SOLUTION_PATH }}" --configuration Release
 
       - name: Run xUnit Tests
-        run: dotnet test "${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj" --logger "trx;LogFileName=test-results.trx" --results-directory "${{ env.RESULTS_DIR }}"
+        run: dotnet test "${{ env.TEST_PROJECT_PATH }}" --logger "trx;LogFileName=${{ env.TEST_RESULTS_LOG_FILENAME }}" --results-directory "${{ env.TEST_RESULTS_DIRECTORY }}"
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ${{ env.RESULTS_DIR }}
+          path: "${{ env.RESULTS_DIR }}"
 
   benchmark:
     needs: build
@@ -122,7 +130,7 @@ jobs:
 
       - name: Validate Submodule Integrity
         run: |
-          if [ ! -d "${{ env.PROJECT_DIR }}/Async.Locks" ]; then
+          if [ ! -d "${{ env.ASYNC_LOCKS_SUBMODULE_PATH }}" ]; then
             echo "Submodule Async.Locks is missing! Exiting..."
             exit 1
           fi
@@ -136,14 +144,23 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore Dependencies for Benchmarking
-        run: dotnet restore "${{ github.workspace }}/BenchmarkingSandbox.sln"
+        run: dotnet restore "${{ env.BENCHMARK_SOLUTION_PATH }}"
+        working-directory: ${{ env.GITHUB_WORKSPACE }}
 
       - name: Compile Benchmarking Project
-        run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
+        run: dotnet build "${{ env.BENCHMARK_RUNNER_PROJECT_PATH }}" --configuration Release
+        working-directory: "${{ env.PROJECT_DIR }}/Benchmarking.Runner"
+
+      - name: Debug - Before Running Benchmarks
+        run: |
+          echo "--- Listing files in ${{ env.PROJECT_DIR }}/Benchmarking.Runner ---"
+          ls -la "${{ env.PROJECT_DIR }}/Benchmarking.Runner"
+          echo "--- Listing files in ${{ env.BENCHMARK_RESULTS_DIR }} (before run) ---"
+          ls -la "${{ env.BENCHMARK_RESULTS_DIR }}" || echo "BenchmarkResults directory does not exist yet."
 
       - name: Run Benchmarks (QuickCI Only) and Capture Log
-        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --category ${{ env.BENCHMARK_PROFILE }} --filter *Benchmark* > benchmark_full.log 2>&1
-        timeout-minutes: 3
+        run: dotnet run --project "${{ env.BENCHMARK_RUNNER_PROJECT_PATH }}" --configuration Release -- --category "${{ env.BENCHMARK_PROFILE }}" --filter *Benchmark* > "${{ env.BENCHMARK_FULL_LOG_PATH }}" 2>&1
+        working-directory: "${{ env.PROJECT_DIR }}/Benchmarking.Runner"
         continue-on-error: true
 
       - name: Upload Full Benchmark Log
@@ -151,39 +168,46 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-full-log
-          path: benchmark_full.log
+          path: "${{ env.BENCHMARK_FULL_LOG_PATH }}"
         continue-on-error: true
 
       - name: Store and Upload Benchmark Results (if they exist)
-        if: success() || failure()
+        if: always()
         run: |
+          echo "--- Checking and Uploading Benchmark Results from: ${{ env.BENCHMARK_RESULTS_DIR }} ---"
           if [ -d "${{ env.BENCHMARK_RESULTS_DIR }}" ]; then
+            ls -la "${{ env.BENCHMARK_RESULTS_DIR }}"
             uses: actions/upload-artifact@v4
             with:
               name: benchmark-results
-              path: ${{ env.BENCHMARK_RESULTS_DIR }}
+              path: "${{ env.BENCHMARK_RESULTS_DIR }}"
           else
-            echo "Benchmark results directory not found."
+            echo "Warning: Benchmark results directory not found at ${{ env.BENCHMARK_RESULTS_DIR }}."
           fi
         continue-on-error: true
 
       - name: Generate Summary for PRs (if results exist)
-        if: success() || failure()
+        if: always()
         run: |
+          echo "--- Checking and Generating PR Summary at: ${{ env.PR_SUMMARY_PATH }} ---"
           if [ -f "${{ env.PR_SUMMARY_PATH }}" ]; then
-            echo "### Benchmark Results for SHA $SHA" >> ${{ env.PR_SUMMARY_PATH }}
+            echo "### Benchmark Results for SHA $SHA" >> "${{ env.PR_SUMMARY_PATH }}"
             if [ -f "${{ env.BENCHMARK_RESULTS_DIR }}/*" ]; then
-              cat ${{ env.BENCHMARK_RESULTS_DIR }}/* >> ${{ env.PR_SUMMARY_PATH }}
+              cat "${{ env.BENCHMARK_RESULTS_DIR }}/*" >> "${{ env.PR_SUMMARY_PATH }}"
+              echo "Appended benchmark results to ${{ env.PR_SUMMARY_PATH }}."
             else
-              echo "No benchmark result files found to add to summary."
+              echo "Warning: No benchmark result files found in ${{ env.BENCHMARK_RESULTS_DIR }} to add to summary."
             fi
+            cat "${{ env.PR_SUMMARY_PATH }}"
           else
-            echo "PR summary file not found."
+            echo "Warning: PR summary file not found at ${{ env.PR_SUMMARY_PATH }}."
           fi
+        continue-on-error: true
 
       - name: Upload Summary (if it exists)
-        if: success() || failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-summary
-          path: ${{ env.PR_SUMMARY_PATH }}
+          path: "${{ env.PR_SUMMARY_PATH }}"
+        continue-on-error: true
