@@ -90,7 +90,7 @@ namespace BenchmarkingSandbox.Runner
         [Benchmark]
         public async Task AcquireRelease_Contended()
         {
-            Console.WriteLine("[AsyncLockMonitor-DEBUG] Entering AcquireRelease_Contended"); // ADDED LOGGING
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Entering AcquireRelease_Contended");
             var tasks = new Task[ConcurrentTasks];
             try
             {
@@ -100,14 +100,14 @@ namespace BenchmarkingSandbox.Runner
                     tasks[i] = Task.Run(async () =>
                     {
                         var taskId = Task.CurrentId ?? 0;
-                        Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Starting AcquireAsync"); // ADDED LOGGING
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Task {taskId}: Starting AcquireAsync");
                         await using (await _asyncLock.AcquireAsync())
                         {
-                            Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Lock Acquired"); // ADDED LOGGING
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Task {taskId}: Lock Acquired");
                             await SimulateWorkAsync(1);
-                            Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Work Simulated"); // ADDED LOGGING
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Task {taskId}: Work Simulated");
                         }
-                        Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Lock Released"); // ADDED LOGGING
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Task {taskId}: Lock Released");
                     });
                 }
                 await Task.WhenAll(tasks);
@@ -121,11 +121,11 @@ namespace BenchmarkingSandbox.Runner
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AsyncLockMonitor-ERROR] Exception in AcquireRelease_Contended: {ex}"); // ADDED LOGGING
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-ERROR] Exception in AcquireRelease_Contended: {ex}");
             }
             finally
             {
-                Console.WriteLine("[AsyncLockMonitor-DEBUG] Leaving AcquireRelease_Contended"); // ADDED LOGGING
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [AsyncLockMonitor-DEBUG] Leaving AcquireRelease_Contended");
             }
         }
 
