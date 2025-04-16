@@ -109,15 +109,11 @@ jobs:
         run: dotnet build --configuration Release BenchmarkingSandbox.Runner.csproj
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
 
-      - name: Create Artifacts Directory
-        run: mkdir -p ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
-        working-directory: ${{ github.workspace }}
-
       - name: Run Benchmarks (${{ matrix.benchmark }})
         id: benchmark_run
-        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput > benchmark_output.log # Redirect output
+        run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release --filter "${{ matrix.benchmark }}*" --category QuickCI -- --ConcurrentTasks 3 --TimeoutMs 1 --IterationCount 10 --WarmupCount 5 --RunStrategy Throughput > benchmark_output.log
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
-        timeout-minutes: 15
+        timeout-minutes: 5
         env:
           BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
           LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
@@ -125,9 +121,18 @@ jobs:
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
         continue-on-error: true
 
+      - name: Make Log Script Executable
+        run: chmod +x ./scripts/ubuntu/capture_essential_benchmark_logs.sh
+        working-directory: ${{ github.workspace }}
+
       - name: Capture Essential Benchmark Logs (${{ matrix.benchmark }})
         if: always()
-        run: cat benchmark_output.log | ./scripts/ubuntu/capture_essential_benchmark_logs.sh - # Read from stdin
+        run: |
+          if [ -f "benchmark_output.log" ]; then
+            cat benchmark_output.log | ./scripts/ubuntu/capture_essential_benchmark_logs.sh -
+          else
+            echo "Warning: benchmark_output.log not found."
+          fi
         working-directory: ${{ github.workspace }}
 
       - name: Debug - List Benchmark Artifacts
