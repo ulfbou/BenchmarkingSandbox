@@ -77,6 +77,13 @@ namespace BenchmarkingSandbox.Runner
             {
                 await SimulateWorkAsync(1);
             }
+
+            var events = _monitor.GetEvents();
+            foreach (var e in events)
+            {
+                Console.WriteLine($"[AsyncLockMonitor] Task {e.TaskId}: Event={e.EventName}, Timestamp={e.Timestamp}");
+            }
+            _monitor.Reset();
         }
 
         [BenchmarkCategory("AcquireRelease", "QuickCI")]
