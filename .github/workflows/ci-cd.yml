@@ -83,6 +83,7 @@ jobs:
         if: always()
 
   benchmark-pr:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,23 +110,23 @@ jobs:
       - name: Debug - Check dotnet Version
         run: dotnet --version > dotnet_version.log
 
-      - name: Run Benchmarks (${{ matrix.benchmark }})
+      - name: Run Single Benchmark (Unfiltered)
         id: benchmark_run
         run: dotnet run --project BenchmarkingSandbox.Runner.csproj --configuration Release > benchmark_output.log
         working-directory: ${{ github.workspace }}/Src/Benchmarking.Runner
         timeout-minutes: 5
         env:
-          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr
+          BDN_ARTIFACTS_PATH: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr # Still using matrix env var for consistency
           LOGS_ROOT_PATH: ${{ env.BENCHMARK_LOGS_ROOT }}
           BENCHMARK_PROFILE: CI
-          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
+          GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }} # Still using matrix env var for consistency
         continue-on-error: true
 
       - name: Make Log Script Executable
         run: chmod +x ./scripts/ubuntu/capture_essential_benchmark_logs.sh
         working-directory: ${{ github.workspace }}
 
-      - name: Capture Essential Benchmark Logs (${{ matrix.benchmark }})
+      - name: Capture Essential Benchmark Logs (Single)
         if: always()
         run: |
           if [ -f "benchmark_output.log" ]; then
@@ -146,40 +147,12 @@ jobs:
           name: dotnet-version-log
           path: dotnet_version.log
 
-      - name: Upload Benchmark Output Log
+      - name: Upload Benchmark Output Log (Single)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-output-${{ matrix.benchmark }}-pr
+          name: simplified-benchmark-output
           path: benchmark_output.log
-
-      - name: Upload Benchmark Results (${{ matrix.benchmark }})
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results-${{ matrix.benchmark }}-pr
-          path: ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results
-
-      - name: Export PR Markdown Summary (${{ matrix.benchmark }})
-        if: github.event_name == 'pull_request'
-        run: |
-          mkdir -p ${{ env.BENCHMARK_SUMMARIES_ROOT }}
-          LATEST_MD=$(ls -t ${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/results/*.md | head -n 1)
-          if [ -n "$LATEST_MD" ]; then
-            cp "$LATEST_MD" ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
-          else
-            echo "No Markdown summary found for ${{ matrix.benchmark }} (PR)."
-            touch ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
-          fi
-        env:
-          GITHUB_WORKSPACE: ${{ github.workspace }}
-
-      - name: Upload PR Markdown Summary (${{ matrix.benchmark }})
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary-md-pr-${{ matrix.benchmark }}
-          path: ${{ env.BENCHMARK_SUMMARIES_ROOT }}/summary-md-pr-${{ matrix.benchmark }}.md
 
   summarize-benchmarks-pr:
     needs: benchmark-pr
