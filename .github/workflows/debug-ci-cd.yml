@@ -22,7 +22,7 @@ env:
   PR_SUMMARY_PATH: "${{ github.workspace }}/benchmark-summary.md"
   RESULTS_DIR: "${{ github.workspace }}/TestResults"
   TEST_PROJECT_PATH: "${{ github.workspace }}/Tests/Benchmarking.Tests/BenchmarkingSandbox.Tests.csproj"
-  TEST_RESULTS_DIRECTORY: "${{ env.RESULTS_DIR }}"
+  TEST_RESULTS_DIRECTORY: "${{ github.workspace }}/TestResults"
   TEST_RESULTS_LOG_FILENAME: "test-results.trx"
 
 jobs:
