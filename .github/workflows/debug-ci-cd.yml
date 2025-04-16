@@ -3,7 +3,7 @@ name: Debug CI/CD Pipeline
 on:
   push:
     branches:
-      - main
+      - Debug
   pull_request:
 
 env:
