@@ -135,9 +135,19 @@ jobs:
           BENCHMARK_PROFILE: CI
           GITHUB_MATRIX_BENCHMARK: ${{ matrix.benchmark }}
 
+      - name: Capture Essential Benchmark Logs (AcquireRelease_Contended)
+        if: matrix.benchmark == 'AsyncLockBenchmark'
+        run: |
+          LOG_FILE="${{ env.BENCHMARK_ARTIFACTS_ROOT }}/${{ matrix.benchmark }}-pr/AsyncLockBenchmark*.log"
+          if [ -f "$LOG_FILE" ]; then
+            ./scripts/ubuntu/capture_essential_benchmark_logs.sh "$LOG_FILE"
+          else
+            echo "Error: Log file not found: $LOG_FILE"
+          fi
+
       - name: Debug - List Benchmark Artifacts
         run: ls -R ${{ env.BENCHMARK_ARTIFACTS_ROOT }}
-        if: always() # Ensure this runs even if benchmarks fail
+        if: always()
 
       - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
@@ -178,7 +188,7 @@ jobs:
 
       - name: Merge PR Summaries
         run: |
-          mkdir -p ${{ github.workspace }}/logs/pr-full-summary # Keeping this path for the comment
+          mkdir -p ${{ github.workspace }}/logs/pr-full-summary
           find ${{ env.BENCHMARK_SUMMARIES_ROOT }} -name "summary-md-pr-*.md" -print0 | while IFS= read -r -d $'\0' file; do
             echo "--- $file ---" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
             cat "$file" >> ${{ github.workspace }}/logs/pr-full-summary/pr-full-summary.md
