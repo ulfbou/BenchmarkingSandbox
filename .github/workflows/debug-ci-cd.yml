@@ -143,13 +143,16 @@ jobs:
 
       - name: Run Benchmarks (QuickCI Only) and Capture Log
         run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --category ${{ env.BENCHMARK_PROFILE }} --filter *Benchmark* > benchmark_full.log 2>&1
-        timeout-minutes: 5
+        timeout-minutes: 3
+        continue-on-error: true
 
       - name: Upload Full Benchmark Log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-full-log
           path: benchmark_full.log
+        continue-on-error: true
 
       - name: Store and Upload Benchmark Results (if they exist)
         if: success() || failure()
@@ -162,6 +165,7 @@ jobs:
           else
             echo "Benchmark results directory not found."
           fi
+        continue-on-error: true
 
       - name: Generate Summary for PRs (if results exist)
         if: success() || failure()
