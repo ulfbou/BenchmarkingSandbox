@@ -45,11 +45,29 @@ namespace BenchmarkingSandbox.Runner
 
             try
             {
-                Task.WaitAll(new[]
+                var benchmarkToRun = Environment.GetEnvironmentVariable("GITHUB_MATRIX_BENCHMARK");
+
+                if (!string.IsNullOrEmpty(benchmarkToRun))
                 {
-                    Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token)
-                    //Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token)
-                }, token);
+                    Console.WriteLine($"{DateTime.Now}: Running benchmark: {benchmarkToRun}");
+
+                    if (benchmarkToRun == "AsyncPriorityQueueBenchmark")
+                    {
+                        Task.Run(() => BenchmarkRunner.Run<AsyncPriorityQueueBenchmarks>(config), token).Wait(token);
+                    }
+                    else if (benchmarkToRun == "AsyncLockBenchmark")
+                    {
+                        Task.Run(() => BenchmarkRunner.Run<AsyncLockBenchmark>(config), token).Wait(token);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"{DateTime.Now}: Unknown benchmark specified in GITHUB_MATRIX_BENCHMARK: {benchmarkToRun}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"{DateTime.Now}: GITHUB_MATRIX_BENCHMARK environment variable not set.");
+                }
             }
             catch (OperationCanceledException)
             {
