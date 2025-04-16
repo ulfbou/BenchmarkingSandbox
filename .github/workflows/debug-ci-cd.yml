@@ -141,22 +141,44 @@ jobs:
       - name: Compile Benchmarking Project
         run: dotnet build "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release
 
-      - name: Run Benchmarks (QuickCI Only)
-        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --category ${{ env.BENCHMARK_PROFILE }} --filter *Benchmark*
-        timeout-minutes: 3
-        
-      - name: Store and Upload Benchmark Results
+      - name: Run Benchmarks (QuickCI Only) and Capture Log
+        run: dotnet run --project "${{ github.workspace }}/Src/Benchmarking.Runner/BenchmarkingSandbox.Runner.csproj" --configuration Release -- --category ${{ env.BENCHMARK_PROFILE }} --filter *Benchmark* > benchmark_full.log 2>&1
+        timeout-minutes: 5
+
+      - name: Upload Full Benchmark Log
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: ${{ env.BENCHMARK_RESULTS_DIR }}
+          name: benchmark-full-log
+          path: benchmark_full.log
 
-      - name: Generate Summary for PRs
+      - name: Store and Upload Benchmark Results (if they exist)
+        if: success() || failure()
         run: |
-          echo "### Benchmark Results for SHA $SHA" >> ${{ env.PR_SUMMARY_PATH }}
-          cat ${{ env.BENCHMARK_RESULTS_DIR }}/* >> ${{ env.PR_SUMMARY_PATH }}
+          if [ -d "${{ env.BENCHMARK_RESULTS_DIR }}" ]; then
+            uses: actions/upload-artifact@v4
+            with:
+              name: benchmark-results
+              path: ${{ env.BENCHMARK_RESULTS_DIR }}
+          else
+            echo "Benchmark results directory not found."
+          fi
 
-      - name: Upload Summary
+      - name: Generate Summary for PRs (if results exist)
+        if: success() || failure()
+        run: |
+          if [ -f "${{ env.PR_SUMMARY_PATH }}" ]; then
+            echo "### Benchmark Results for SHA $SHA" >> ${{ env.PR_SUMMARY_PATH }}
+            if [ -f "${{ env.BENCHMARK_RESULTS_DIR }}/*" ]; then
+              cat ${{ env.BENCHMARK_RESULTS_DIR }}/* >> ${{ env.PR_SUMMARY_PATH }}
+            else
+              echo "No benchmark result files found to add to summary."
+            fi
+          else
+            echo "PR summary file not found."
+          fi
+
+      - name: Upload Summary (if it exists)
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-summary
