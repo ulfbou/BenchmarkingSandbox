@@ -90,30 +90,43 @@ namespace BenchmarkingSandbox.Runner
         [Benchmark]
         public async Task AcquireRelease_Contended()
         {
+            Console.WriteLine("[AsyncLockMonitor-DEBUG] Entering AcquireRelease_Contended"); // ADDED LOGGING
             var tasks = new Task[ConcurrentTasks];
-            for (int i = 0; i < ConcurrentTasks; i++)
+            try
             {
-                tasks[i] = Task.Run(async () =>
+                for (int i = 0; i < ConcurrentTasks; i++)
                 {
-                    var taskId = Task.CurrentId ?? 0;
-                    AsyncLockEvents.Log.TaskStarted(taskId);
-                    await using (await _asyncLock.AcquireAsync())
+                    var taskLocalId = i;
+                    tasks[i] = Task.Run(async () =>
                     {
-                        AsyncLockEvents.Log.LockAcquired(taskId);
-                        await SimulateWorkAsync(1);
-                        AsyncLockEvents.Log.LockReleased(taskId);
-                    }
-                    AsyncLockEvents.Log.TaskCompleted(taskId);
-                });
-            }
-            await Task.WhenAll(tasks);
+                        var taskId = Task.CurrentId ?? 0;
+                        Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Starting AcquireAsync"); // ADDED LOGGING
+                        await using (await _asyncLock.AcquireAsync())
+                        {
+                            Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Lock Acquired"); // ADDED LOGGING
+                            await SimulateWorkAsync(1);
+                            Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Work Simulated"); // ADDED LOGGING
+                        }
+                        Console.WriteLine($"[AsyncLockMonitor-DEBUG] Task {taskId}: Lock Released"); // ADDED LOGGING
+                    });
+                }
+                await Task.WhenAll(tasks);
 
-            var events = _monitor.GetEvents();
-            foreach (var e in events)
-            {
-                _logger.Log("AsyncLockMonitor", e.TaskId, $"Event: {e.EventName}, Timestamp: {e.Timestamp}");
+                var events = _monitor.GetEvents();
+                foreach (var e in events)
+                {
+                    _logger.Log("AsyncLockMonitor", e.TaskId, $"Event: {e.EventName}, Timestamp: {e.Timestamp}");
+                }
+                _monitor.Reset();
             }
-            _monitor.Reset();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AsyncLockMonitor-ERROR] Exception in AcquireRelease_Contended: {ex}"); // ADDED LOGGING
+            }
+            finally
+            {
+                Console.WriteLine("[AsyncLockMonitor-DEBUG] Leaving AcquireRelease_Contended"); // ADDED LOGGING
+            }
         }
 
         [BenchmarkCategory("Contention")]
