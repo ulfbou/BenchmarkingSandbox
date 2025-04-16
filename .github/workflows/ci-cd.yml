@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-output
-          path: ${{ github.workspace }}/Src/*/bin/Release/net9.0/
+          path: ${{ github.workspace }}/Src/**/bin/Release/net9.0/
 
   test:
     needs: build
@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ${{ github.workspace }}/Tests/*/TestResults/*.trx
+          path: ${{ github.workspace }}/Tests/**/TestResults/*.trx
         if: always()
 
   benchmark-pr:
@@ -111,12 +111,15 @@ jobs:
           BDN_ARTIFACTS_PATH: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
           LOGS_ROOT_PATH: ${{ github.workspace }}
           BENCHMARK_PROFILE: CI
-
-      - name: Upload PR Benchmark Results (${{ matrix.benchmark }})
+        with:
+          name: benchmark-results-${{ matrix.benchmark }}-pr
+          path: ${{ github.workspace }}/logs/benchmark-results/{{ matrix.benchmark }}-${{ matrix.paramSet }}
+          
+      - name: Upload Benchmark Results (${{ matrix.benchmark }})
         uses: actions/upload-artifact@v4
         with:
-          name: pr-benchmark-results-${{ matrix.benchmark }}
-          path: ${{ github.workspace }}/logs/benchmark-results/${{ matrix.benchmark }}-pr
+          name: benchmark-results-{{ matrix.benchmark }}-pr
+          path: github.workspace/logs/benchmark−results/{{ matrix.benchmark }}-pr
 
       - name: Export PR Markdown Summary (${{ matrix.benchmark }})
         run: |
