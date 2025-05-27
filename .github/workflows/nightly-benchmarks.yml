@@ -1,10 +1,10 @@
 name: Nightly Benchmarks
 
-on:
-  schedule:
-    - cron: '0 3 * * *'
+#on:
+#  schedule:
+#    - cron: '0 3 * * *'
 
-jobs:
+#jobs:
   build:
     name: Build BenchmarkingSandbox
     runs-on: ubuntu-latest
